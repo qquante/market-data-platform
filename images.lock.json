@@ -1,0 +1,14 @@
+[
+  {
+    "requested": "postgres:18.6-alpine",
+    "pinned": "postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2"
+  },
+  {
+    "requested": "nats:2.14.6-alpine",
+    "pinned": "nats@sha256:ad7a43eb7e3337c3c38ce5d784d1461791f95f730f252d2b25eee699752a0ca3"
+  },
+  {
+    "requested": "clickhouse/clickhouse-server:26.8",
+    "pinned": "clickhouse/clickhouse-server@sha256:fa394da808cc53f76d0344429421d6c422a6ee85fe7450135c0e3cff4df9bcbb"
+  }
+]
