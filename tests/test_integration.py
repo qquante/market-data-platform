@@ -360,9 +360,25 @@ def test_catalog_preserves_unknown_null_false_zero_and_unverified_semantics(clie
     accepted(client, meta, raw)
     saved = wait_capture(client, meta["capture_id"], analytics=True)
     assert client.get(f"/v1/captures/{meta['capture_id']}/raw").content == raw
-    response = client.get("/v1/catalog", params={"source_kind": "fixture", "limit": 1000})
+    response = client.get("/v1/catalog", params={
+        "source_kind": "fixture", "limit": 1000, "capture_id": meta["capture_id"],
+    })
     assert response.status_code == 200
-    fields = [row for row in response.json()["items"] if row["endpoint"] == "token_info"]
+    catalog = response.json()
+    assert catalog["capture_id"] == meta["capture_id"]
+    assert catalog["capture_limit"] == 1
+    assert catalog["scope"] == "specified capture, latest published interpretation only"
+    assert catalog["has_more"] is False and catalog["truncated"] is False
+    assert len(catalog["items"]) == saved["runs"][0]["field_count"]
+    assert all(row["endpoint"] == "token_info" and row["observations"] == 1 for row in catalog["items"])
+    for other_source in ("gmgn", "legacy_gmgn"):
+        excluded = client.get("/v1/catalog", params={
+            "source_kind": other_source, "capture_id": meta["capture_id"], "limit": 1000,
+        })
+        assert excluded.status_code == 200
+        assert excluded.json()["items"] == []
+        assert excluded.json()["has_more"] is False and excluded.json()["truncated"] is False
+    fields = catalog["items"]
     def catalog_has(pointer, **properties):
         return any(
             row["pointer"] == pointer and all(row[key] == value for key, value in properties.items())
@@ -374,11 +390,20 @@ def test_catalog_preserves_unknown_null_false_zero_and_unverified_semantics(clie
     assert catalog_has(prefix + "/2", value_type="integer", category="unknown")
     assert catalog_has("/data/liquidity", quality="missing")
     assert catalog_has("/data/link/description", quality="missing")
-    assert observations(client, token, metric="holder_count")["items"] == []
-    explicit = observations(client, token, metric="holder_count", include_unverified=True)["items"]
+    holders = observations(client, token, metric="holder_count")["items"]
+    assert len(holders) == 1
+    assert holders[0]["value_text"] == "0"
+    assert holders[0]["quality"] == "valid"
+    assert holders[0]["unit"] == "count"
+    assert holders[0]["value_type"] == "integer"
+    assert catalog_has("/data/holder_count", quality="valid", value_type="integer")
+    assert observations(client, token, metric="total_supply")["items"] == []
+    explicit = observations(client, token, metric="total_supply", include_unverified=True)["items"]
     assert len(explicit) == 1
-    assert explicit[0]["value_text"] == "0"
+    assert explicit[0]["value_text"] == "1000000000"
     assert explicit[0]["quality"] == "unverified"
+    assert explicit[0]["unit"] is None
+    assert explicit[0]["value_type"] == "decimal"
     assert observations(client, token, metric="market_cap", include_unverified=True)["items"] == []
     assert saved["runs"][0]["analytics_receipt"]["count"] == saved["runs"][0]["fact_count"]
 

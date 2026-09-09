@@ -9,7 +9,7 @@ from .settings import Settings
 
 def main():
     parser=argparse.ArgumentParser(prog="midas-data")
-    parser.add_argument("command",choices=["api","worker","status","rebuild-analytics","healthcheck","renormalize"])
+    parser.add_argument("command",choices=["api","worker","status","rebuild-analytics","healthcheck","renormalize","compact"])
     parser.add_argument("--source-kind",choices=["fixture","gmgn","legacy_gmgn"])
     parser.add_argument("--limit",type=int,default=100)
     args=parser.parse_args()
@@ -66,23 +66,46 @@ async def admin(settings,command,source_kind=None,limit=100):
                                 settings.clickhouse_user,settings.clickhouse_password)
             async with store.pool.acquire() as owner:
                 if not await owner.fetchval("SELECT pg_try_advisory_lock(60608002)"):
-                    raise RuntimeError("Stop the NEW data worker before rebuilding analytics")
+                    raise RuntimeError("Stop the NEW data worker before analytical maintenance")
                 try:
                     await asyncio.to_thread(sinks.ensure_schema)
+                    if command=="compact":
+                        result=await asyncio.to_thread(sinks.compact_files,max_output_files=2,min_input_files=64)
+                        print(json.dumps(result,default=str))
+                        return
+                    from .analytics import batch_size
+                    from .worker import group_would_overflow
                     after=""
                     count=0
+                    async def flush(group):
+                        nonlocal after,count
+                        if not group:
+                            return
+                        await owner.fetchval("SELECT 1")
+                        receipts=await asyncio.to_thread(sinks.apply_batches,group)
+                        if set(receipts) != {batch_id for batch_id,_ in group}:
+                            raise RuntimeError("Rebuild receipt identity mismatch")
+                        await store.mark_analytics_many(receipts)
+                        after=group[-1][0]
+                        count+=len(group)
                     while True:
                         batches=await store.pool.fetch(
                             "SELECT batch_id FROM normalization_runs WHERE available_at IS NOT NULL AND batch_id>$1 ORDER BY batch_id LIMIT 50",after)
                         if not batches:
                             break
+                        group=[]
+                        group_rows=group_bytes=0
                         for batch in batches:
                             rows=await store.batch_rows(batch["batch_id"])
-                            await asyncio.to_thread(sinks.apply_batch,batch["batch_id"],rows)
-                            receipt=await asyncio.to_thread(sinks.verify_batch,batch["batch_id"])
-                            await store.mark_analytics(batch["batch_id"],receipt)
-                            after=batch["batch_id"]
-                            count+=1
+                            size=batch_size(rows)
+                            if group_would_overflow(len(group),group_rows,group_bytes,len(rows),size):
+                                await flush(group)
+                                group=[]
+                                group_rows=group_bytes=0
+                            group.append((batch["batch_id"],rows))
+                            group_rows+=len(rows)
+                            group_bytes+=size
+                        await flush(group)
                     print(json.dumps({"reconciled_batches":count,"snapshot":sinks.snapshot_info()},default=str))
                 finally:
                     await asyncio.to_thread(sinks.close)

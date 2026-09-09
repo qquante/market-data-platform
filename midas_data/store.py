@@ -113,26 +113,97 @@ class Store:
                 run["analytics_receipt"] = json.loads(run["analytics_receipt"])
         return result
 
+    @staticmethod
+    def _normalization_payload(result) -> tuple[dict, int]:
+        from .contracts import NormalizationResult
+        if not isinstance(result, NormalizationResult):
+            raise TypeError("normalization_result_required")
+        payload = {"facts": [f.model_dump(mode="json") for f in result.facts],
+                   "fields": [f.model_dump(mode="json") for f in result.fields]}
+        # Same exact UTF-8 scope as the normalizer: facts + fields envelopes.
+        # Issues are immutable/hash-checked but not part of this admission budget.
+        size = len(canonical(payload).encode("utf-8"))
+        payload["issues"] = [i.model_dump(mode="json") for i in result.issues]
+        return payload, size
+
+    @staticmethod
+    def normalization_size(result) -> int:
+        """Exact group-planning bytes; do not estimate with Python string length.
+
+        Sum this value for at most eight captures, <=16 MiB and <=10,000 facts.
+        Each per-capture {facts,fields} envelope counts, including its punctuation.
+        This preserves a single capture at the normalizer's exact 16 MiB limit;
+        issues, numeric projections and SQL/COPY overhead are outside this budget.
+        """
+        return Store._normalization_payload(result)[1]
+
     async def record_normalization(self, capture_id: UUID, result) -> dict:
-        version = result.normalizer_version
-        batch_id = hashlib.sha256((str(capture_id) + ":" + version).encode()).hexdigest()
-        facts = [f.model_dump(mode="json") for f in result.facts]
-        fields = [f.model_dump(mode="json") for f in result.fields]
-        issues = [i.model_dump(mode="json") for i in result.issues]
-        content_hash = hashlib.sha256(canonical({"facts":facts,"fields":fields,"issues":issues}).encode()).hexdigest()
-        capture = await self.pool.fetchrow("SELECT source_kind,evidence_kind FROM captures WHERE capture_id=$1", capture_id)
+        """Compatibility wrapper; identical result and transaction semantics."""
+        return (await self.record_normalizations([(capture_id, result)]))[0]
+
+    async def record_normalizations(self, items: list[tuple[UUID, Any]]) -> list[dict]:
+        """Persist 1..8 outputs atomically, then publish once behind the read barrier.
+
+        An immutable-output/COPY conflict rolls back all new group content. A
+        publication failure leaves committed but unpublished content for replay;
+        outbox consumption and availability are committed together afterwards.
+        """
+        if not isinstance(items, list) or not 1 <= len(items) <= 8:
+            raise ValueError("normalization_group_count_limit")
+        capture_ids = []
+        for item in items:
+            if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], UUID):
+                raise TypeError("normalization_group_item_invalid")
+            capture_ids.append(item[0])
+        if len(set(capture_ids)) != len(capture_ids):
+            raise ValueError("normalization_group_duplicate_capture")
+        prepared, total_bytes, total_facts = [], 0, 0
+        for capture_id, result in items:
+            payload, size = self._normalization_payload(result)
+            total_bytes += size
+            total_facts += len(payload["facts"])
+            if total_bytes > 16 * 1024 * 1024:
+                raise ValueError("normalization_group_output_size_limit")
+            if total_facts > 10_000:
+                raise ValueError("normalization_group_fact_count_limit")
+            version = result.normalizer_version
+            prepared.append({"capture_id": capture_id, "version": version,
+                "batch_id": hashlib.sha256((str(capture_id) + ":" + version).encode()).hexdigest(),
+                "content_hash": hashlib.sha256(canonical(payload).encode()).hexdigest(), **payload})
+        versions = [p["version"] for p in prepared]
+        from .normalize import FATAL_ISSUE_CODES, UNSUPPORTED_ISSUE_CODES
         async with self.pool.acquire() as con:
             async with con.transaction():
-                added = await con.fetchval(
+                captures = {r["capture_id"]: r for r in await con.fetch(
+                    "SELECT capture_id,source_kind,evidence_kind FROM captures WHERE capture_id=ANY($1::uuid[])",
+                    capture_ids)}
+                if len(captures) != len(capture_ids):
+                    raise CaptureConflict("Normalization capture is missing")
+                # One statement creates all runs; returned IDs identify only new
+                # outputs. Existing outputs must still match their immutable hash.
+                added_rows = await con.fetch(
                     """INSERT INTO normalization_runs(capture_id,normalizer_version,batch_id,fact_count,field_count,issues,content_sha256)
-                    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7) ON CONFLICT DO NOTHING RETURNING batch_id""",
-                    capture_id, version, batch_id, len(facts), len(fields), canonical(issues), content_hash,
-                )
-                actual_hash = await con.fetchval("SELECT content_sha256 FROM normalization_runs WHERE capture_id=$1 AND normalizer_version=$2",capture_id,version)
-                if actual_hash != content_hash:
+                    SELECT capture_id,version,batch_id,fact_count,field_count,issues::jsonb,content_hash
+                    FROM unnest($1::uuid[],$2::text[],$3::text[],$4::integer[],$5::integer[],$6::text[],$7::text[])
+                    AS input(capture_id,version,batch_id,fact_count,field_count,issues,content_hash)
+                    ON CONFLICT DO NOTHING RETURNING capture_id,normalizer_version""",
+                    capture_ids, versions, [p["batch_id"] for p in prepared],
+                    [len(p["facts"]) for p in prepared], [len(p["fields"]) for p in prepared],
+                    [canonical(p["issues"]) for p in prepared], [p["content_hash"] for p in prepared])
+                added = {(r["capture_id"], r["normalizer_version"]) for r in added_rows}
+                actual = {(r["capture_id"], r["normalizer_version"]): r["content_sha256"] for r in await con.fetch(
+                    """SELECT r.capture_id,r.normalizer_version,r.content_sha256 FROM normalization_runs r
+                    JOIN unnest($1::uuid[],$2::text[]) AS input(capture_id,version)
+                    ON r.capture_id=input.capture_id AND r.normalizer_version=input.version""", capture_ids, versions)}
+                if any(actual.get((p["capture_id"], p["version"])) != p["content_hash"] for p in prepared):
                     raise CaptureConflict("Normalizer version changed immutable output")
-                if added:
-                    for fact in facts:
+                fact_records, field_records, state_ids, states = [], [], [], []
+                for p in prepared:
+                    capture_id, version = p["capture_id"], p["version"]
+                    if (capture_id, version) not in added:
+                        continue
+                    capture = captures[capture_id]
+                    for fact in p["facts"]:
                         numeric = None
                         if fact["value_type"] in ("decimal", "integer") and fact["value_text"] is not None and fact["quality"] in ("valid", "unverified"):
                             try:
@@ -141,41 +212,53 @@ class Store:
                                     numeric = number
                             except InvalidOperation:
                                 pass
-                        await con.execute(
-                            """INSERT INTO facts(fact_id,capture_id,normalizer_version,source_kind,evidence_kind,
-                            chain,token_address,metric,value_text,numeric_value,value_type,unit,category,occurred_at,
-                            time_basis,pointer,quality,contract_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)""",
+                        fact_records.append((
                             UUID(str(fact["fact_id"])), capture_id, version, capture["source_kind"], capture["evidence_kind"],
                             fact["chain"], fact["token_address"], fact["metric"], fact["value_text"], numeric,
                             fact["value_type"], fact["unit"], fact["category"],
-                            datetime.fromisoformat(fact["occurred_at"].replace("Z","+00:00")), fact["time_basis"],
-                            fact["pointer"], fact["quality"], fact["contract_version"],
-                        )
-                    if fields:
-                        await con.executemany(
-                            """INSERT INTO field_observations(capture_id,normalizer_version,pointer,category,value_type,quality,reason,contract_id)
-                               VALUES($1,$2,$3,$4,$5,$6,$7,$8)""",
-                            [(capture_id,version,f["pointer"],f["category"],f["value_type"],f["quality"],f["reason"],f.get("contract_id")) for f in fields],
-                        )
-                    from .normalize import FATAL_ISSUE_CODES, UNSUPPORTED_ISSUE_CODES
-                    rejected = any(i["code"] in FATAL_ISSUE_CODES | UNSUPPORTED_ISSUE_CODES for i in issues)
-                    state = "quarantined" if rejected else "ready"
-                    await con.execute("UPDATE captures SET normalization_state=$2,last_error=NULL WHERE capture_id=$1", capture_id, state)
-        # Serialize publication against temporal reads; no reader can see an
-        # in-flight availability marker. The marker comes from the same DB clock.
-        async with self.pool.acquire() as con:
+                            datetime.fromisoformat(fact["occurred_at"].replace("Z", "+00:00")), fact["time_basis"],
+                            fact["pointer"], fact["quality"], fact["contract_version"]))
+                    field_records.extend((capture_id, version, f["pointer"], f["category"], f["value_type"],
+                        f["quality"], f["reason"], f.get("contract_id")) for f in p["fields"])
+                    rejected = any(i["code"] in FATAL_ISSUE_CODES | UNSUPPORTED_ISSUE_CODES for i in p["issues"])
+                    state_ids.append(capture_id)
+                    states.append("quarantined" if rejected else "ready")
+                if fact_records:
+                    await con.copy_records_to_table("facts", records=fact_records, columns=(
+                        "fact_id", "capture_id", "normalizer_version", "source_kind", "evidence_kind",
+                        "chain", "token_address", "metric", "value_text", "numeric_value", "value_type",
+                        "unit", "category", "occurred_at", "time_basis", "pointer", "quality", "contract_version"))
+                if field_records:
+                    await con.copy_records_to_table("field_observations", records=field_records, columns=(
+                        "capture_id", "normalizer_version", "pointer", "category", "value_type", "quality", "reason", "contract_id"))
+                if state_ids:
+                    await con.execute("""UPDATE captures c SET normalization_state=input.state,last_error=NULL
+                        FROM unnest($1::uuid[],$2::text[]) AS input(capture_id,state)
+                        WHERE c.capture_id=input.capture_id""", state_ids, states)
+            # Group content is now committed. Writers take the exclusive side of
+            # the barrier used by temporal readers; a shared writer lock is unsafe.
             async with con.transaction():
                 await con.execute("SELECT pg_advisory_xact_lock(60608003)")
                 marker = await con.fetchval("SELECT clock_timestamp()")
-                await con.execute("UPDATE captures SET available_at=COALESCE(available_at,$2) WHERE capture_id=$1",capture_id,marker)
-                available = await con.fetchval(
-                    """UPDATE normalization_runs SET available_at=COALESCE(available_at,$3)
-                    WHERE capture_id=$1 AND normalizer_version=$2 RETURNING available_at""", capture_id,version,marker)
-                await con.execute(
-                    "UPDATE facts SET available_at=$3 WHERE capture_id=$1 AND normalizer_version=$2 AND available_at IS NULL",
-                    capture_id, version, available)
-                await con.execute("UPDATE outbox SET consumed_at=COALESCE(consumed_at,$2),last_error=NULL WHERE capture_id=$1", capture_id, marker)
-        return {"batch_id":batch_id,"fact_count":len(facts),"field_count":len(fields),"issues":issues}
+                await con.execute("UPDATE captures SET available_at=COALESCE(available_at,$2) WHERE capture_id=ANY($1::uuid[])",
+                                  capture_ids, marker)
+                published = await con.fetch("""UPDATE normalization_runs r SET available_at=COALESCE(r.available_at,$3)
+                    FROM unnest($1::uuid[],$2::text[]) AS input(capture_id,version)
+                    WHERE r.capture_id=input.capture_id AND r.normalizer_version=input.version
+                    RETURNING r.capture_id,r.normalizer_version,r.available_at""", capture_ids, versions, marker)
+                if len(published) != len(prepared):
+                    raise CaptureConflict("Normalization group publication is incomplete")
+                # Preserve each run's original marker on replay, including mixed
+                # old/new groups. Already-published facts keep their own marker.
+                await con.execute("""UPDATE facts f SET available_at=r.available_at FROM normalization_runs r,
+                    unnest($1::uuid[],$2::text[]) AS input(capture_id,version)
+                    WHERE f.capture_id=input.capture_id AND f.normalizer_version=input.version
+                    AND r.capture_id=f.capture_id AND r.normalizer_version=f.normalizer_version
+                    AND f.available_at IS NULL""", capture_ids, versions)
+                await con.execute("UPDATE outbox SET consumed_at=COALESCE(consumed_at,$2),last_error=NULL WHERE capture_id=ANY($1::uuid[])",
+                                  capture_ids, marker)
+        return [{"batch_id":p["batch_id"], "fact_count":len(p["facts"]),
+                 "field_count":len(p["fields"]), "issues":p["issues"]} for p in prepared]
 
     async def batch_rows(self, batch_id: str) -> list[dict]:
         rows = await self.pool.fetch(
@@ -194,12 +277,92 @@ class Store:
             result.append(obj)
         return result
 
+    @staticmethod
+    def _validate_analytics_receipt(batch_id: str, receipt: dict) -> None:
+        import re
+        from .contracts import utc_datetime
+        from .analytics import SCHEMA_VERSION
+        error = "Analytics receipt identity or verification contract is invalid"
+        if (not isinstance(batch_id, str) or not re.fullmatch(r"[A-Za-z0-9:_-]{1,128}", batch_id)
+                or not isinstance(receipt, dict) or receipt.get("ok") is not True
+                or receipt.get("batch_id") != batch_id):
+            raise RuntimeError(error)
+        count, checksum, sources = receipt.get("count"), receipt.get("checksum"), receipt.get("source_counts")
+        if (type(count) is not int or count < 0 or not isinstance(checksum, str)
+                or not re.fullmatch(r"[a-f0-9]{64}", checksum) or not isinstance(sources, dict)
+                or any(key not in {"fixture", "gmgn", "legacy_gmgn"} or type(value) is not int or value < 0
+                       for key, value in sources.items()) or sum(sources.values()) != count):
+            raise RuntimeError(error)
+        try:
+            frontier = receipt.get("available_frontier")
+            if (count == 0) != (frontier is None):
+                raise ValueError("frontier")
+            frontier = utc_datetime(frontier) if frontier is not None else None
+            schemas = []
+            for name in ("lake", "clickhouse"):
+                member = receipt.get(name)
+                if (not isinstance(member, dict) or member.get("ok") is not True
+                        or member.get("receipt_present") is not True or type(member.get("count")) is not int
+                        or member["count"] != count or member.get("checksum") != checksum
+                        or canonical(member.get("source_counts")) != canonical(sources)):
+                    raise ValueError("sink summary")
+                current = member.get("available_frontier")
+                current = utc_datetime(current) if current is not None else None
+                if current != frontier:
+                    raise ValueError("sink frontier")
+                schemas.append(member.get("schema_version"))
+            if schemas != [SCHEMA_VERSION, SCHEMA_VERSION]:
+                raise ValueError("schema")
+            snapshot = receipt.get("snapshot")
+            if (not isinstance(snapshot, dict) or snapshot.get("scope") != "batch_commit"
+                    or type(snapshot.get("snapshot_id")) is not int or snapshot["snapshot_id"] < 0):
+                raise ValueError("snapshot")
+            utc_datetime(snapshot.get("snapshot_time"))
+        except (ValueError, TypeError, OverflowError):
+            raise RuntimeError(error) from None
+
+    async def defer_analytics(self, batch_id: str, code: str) -> dict | None:
+        """Schedule a published pending run for 1..60s later, using the DB clock.
+
+        Store only an exception-class-shaped code, never exception text or body.
+        Attempts survive eventual success; unavailable/already-applied runs are
+        not moved back into the pending queue.
+        """
+        import re
+        safe_code = code if isinstance(code, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", code) else "AnalyticsError"
+        row = await self.pool.fetchrow("""UPDATE normalization_runs
+            SET analytics_retry_at=statement_timestamp()
+                + LEAST(60,power(2,LEAST(analytics_attempts,6)))::integer * interval '1 second',
+                analytics_attempts=CASE WHEN analytics_attempts < 9223372036854775807 THEN analytics_attempts+1 ELSE analytics_attempts END,
+                analytics_last_error=$2
+            WHERE batch_id=$1 AND available_at IS NOT NULL AND analytics_applied_at IS NULL
+            RETURNING batch_id,analytics_retry_at,analytics_attempts,analytics_last_error""", batch_id, safe_code)
+        return dict(row) if row is not None else None
+
     async def mark_analytics(self, batch_id: str, receipt: dict):
-        if not receipt.get("ok"):
-            raise RuntimeError("Analytics did not verify both destinations")
-        await self.pool.execute(
-            "UPDATE normalization_runs SET analytics_applied_at=$2,analytics_receipt=$3::jsonb WHERE batch_id=$1",
-            batch_id,utcnow(),canonical(receipt))
+        await self.mark_analytics_many({batch_id: receipt})
+
+    async def mark_analytics_many(self, receipts: dict[str, dict]):
+        """Confirm at most eight complete matching sink receipts atomically."""
+        if not isinstance(receipts, dict) or not 1 <= len(receipts) <= 8:
+            raise ValueError("analytics_receipt_group_count_limit")
+        for batch_id, receipt in receipts.items():
+            self._validate_analytics_receipt(batch_id, receipt)
+        batch_ids = list(receipts)
+        encoded = [canonical(receipts[batch_id]) for batch_id in batch_ids]
+        marker = utcnow()
+        async with self.pool.acquire() as con:
+            async with con.transaction():
+                updated = await con.fetch("""UPDATE normalization_runs r
+                    SET analytics_applied_at=$3,analytics_receipt=input.receipt::jsonb,
+                        analytics_retry_at=NULL,analytics_last_error=NULL
+                    FROM unnest($1::text[],$2::text[]) AS input(batch_id,receipt)
+                    WHERE r.batch_id=input.batch_id AND r.available_at IS NOT NULL
+                    RETURNING r.batch_id,r.fact_count""", batch_ids, encoded, marker)
+                if {row["batch_id"] for row in updated} != set(batch_ids):
+                    raise CaptureConflict("Analytics receipt batch is missing or unpublished")
+                if any(row["fact_count"] != receipts[row["batch_id"]]["count"] for row in updated):
+                    raise CaptureConflict("Analytics receipt count differs from immutable run")
 
     async def status(self) -> dict:
         counts = await self.pool.fetch("SELECT source_kind,normalization_state,count(*) AS count FROM captures GROUP BY 1,2")
@@ -207,10 +370,52 @@ class Store:
             """SELECT count(*) FILTER(WHERE consumed_at IS NULL) AS pending,
             count(*) FILTER(WHERE consumed_at IS NULL AND published_at IS NULL) AS unpublished FROM outbox""")
         analytics_pending = await self.pool.fetchval("SELECT count(*) FROM normalization_runs WHERE analytics_applied_at IS NULL")
+        analytics_failures = dict(await self.pool.fetchrow("""SELECT count(*) AS pending_count,
+            min(analytics_retry_at) AS next_retry_at FROM normalization_runs
+            WHERE available_at IS NOT NULL AND analytics_applied_at IS NULL AND analytics_last_error IS NOT NULL"""))
+        analytics_failures["items"] = [dict(row) for row in await self.pool.fetch("""SELECT batch_id,capture_id,
+            normalizer_version,analytics_retry_at,analytics_attempts,analytics_last_error FROM normalization_runs
+            WHERE available_at IS NOT NULL AND analytics_applied_at IS NULL AND analytics_last_error IS NOT NULL
+            ORDER BY recorded_at,batch_id LIMIT 100""")]
+        analytics_failures["limit"] = 100
         health = await self.pool.fetch("SELECT worker_name,heartbeat_at,state,details FROM worker_health")
+        bridges = await self.pool.fetch("""SELECT source_name,origin_at,heartbeat_at,state,last_error,
+            accepted_count,unavailable_count,rejected_count,accepted_raw_bytes,progress,details
+            FROM bridge_state WHERE source_name NOT LIKE 'fixture:%' ORDER BY source_name LIMIT 50""")
         return {"captures":[dict(r) for r in counts],"outbox":dict(queue),
-                "analytics_pending":analytics_pending,"workers":[dict(r) for r in health]}
+                "analytics_pending":analytics_pending,"analytics_failures":analytics_failures,"workers":[dict(r) for r in health],
+                "bridges":[dict(r) for r in bridges]}
 
+    async def ingestion_status(self, limit: int = 50) -> dict:
+        if not 1 <= limit <= 100:
+            raise ValueError("ingestion_exception_limit")
+        source = "gmgn-legacy-live-v1"
+        row = await self.pool.fetchrow("""SELECT source_name,origin_at,state,heartbeat_at,last_error,
+            accepted_count,unavailable_count,rejected_count,accepted_raw_bytes,progress,details,
+            extract(epoch FROM clock_timestamp()-heartbeat_at) AS heartbeat_age_seconds
+            FROM bridge_state WHERE source_name=$1""",source)
+        if row is None:
+            return {"state":"not_started","source_name":source,"exceptions":[]}
+        result = dict(row)
+        for key in ("progress","details"):
+            result[key] = json.loads(result[key])
+        exceptions = await self.pool.fetch("""
+            WITH missing AS MATERIALIZED (
+              SELECT capture_id,source_received_at,endpoint,source_status,state,reason,attempts,last_attempt_at
+              FROM bridge_delivery WHERE source_name=$1 AND state='unavailable'
+              ORDER BY source_received_at DESC LIMIT $2
+            ), rejected AS MATERIALIZED (
+              SELECT capture_id,source_received_at,endpoint,source_status,state,reason,attempts,last_attempt_at
+              FROM bridge_delivery WHERE source_name=$1 AND state='rejected'
+              ORDER BY source_received_at DESC LIMIT $2
+            ) SELECT * FROM (SELECT * FROM missing UNION ALL SELECT * FROM rejected) e
+              ORDER BY source_received_at DESC LIMIT $2""",source,limit)
+        result["exceptions"] = [dict(e) for e in exceptions]
+        result["exception_limit"] = limit
+        result["discovered_calls"] = sum(result[k] for k in ("accepted_count","unavailable_count","rejected_count"))
+        result["coverage_basis"] = "discovered source calls; revisited received_at interval, not closed commit-time coverage"
+        result["accepted_meaning"] = "raw/API receipt; normalization and analytical readiness are separate"
+        return result
     async def heartbeat(self, state: str, details: dict | None = None):
         await self.pool.execute(
             """INSERT INTO worker_health(worker_name,heartbeat_at,state,details) VALUES('data-worker',$1,$2,$3::jsonb)

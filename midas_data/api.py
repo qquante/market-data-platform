@@ -160,9 +160,12 @@ def make_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/catalog")
     async def catalog(request: Request,source_kind: str=Query(...,pattern="^(fixture|gmgn|legacy_gmgn)$"),
                       limit: int=Query(200,ge=1,le=1000),
-                      capture_limit: int=Query(20,ge=1,le=100)):
+                      capture_limit: int=Query(20,ge=1,le=20),
+                      capture_id: UUID | None=None):
+        selected_capture_limit=1 if capture_id is not None else capture_limit
         rows=await request.app.state.store.pool.fetch(
             """WITH recent AS MATERIALIZED (SELECT capture_id,endpoint FROM captures WHERE source_kind=$1
+            AND ($4::uuid IS NULL OR capture_id=$4)
             ORDER BY recorded_at DESC,capture_id DESC LIMIT $3)
             SELECT c.endpoint,f.pointer,f.category,f.value_type,f.quality,f.contract_id,
             count(*) AS observations FROM recent c
@@ -171,9 +174,18 @@ def make_app(settings: Settings | None = None) -> FastAPI:
               ORDER BY available_at DESC,normalizer_version DESC LIMIT 1) selected_run ON true
             JOIN field_observations f ON f.capture_id=c.capture_id
               AND f.normalizer_version=selected_run.normalizer_version
-            GROUP BY 1,2,3,4,5,6 ORDER BY 1,2 LIMIT $2""",source_kind,limit,capture_limit)
-        return {"items":[dict(r) for r in rows],"limit":limit,"source_kind":source_kind,
-                "scope":"latest captures, latest published interpretation only","capture_limit":capture_limit,
+            GROUP BY 1,2,3,4,5,6 ORDER BY 1,2 LIMIT $2""",
+            source_kind,limit+1,selected_capture_limit,capture_id)
+        has_more=len(rows)>limit
+        return {"items":[dict(r) for r in rows[:limit]],"limit":limit,"source_kind":source_kind,
+                "scope":("specified capture, latest published interpretation only" if capture_id is not None
+                         else "latest captures, latest published interpretation only"),
+                "capture_id":str(capture_id) if capture_id is not None else None,
+                "capture_limit":selected_capture_limit,"has_more":has_more,"truncated":has_more,
+                "coverage":"bounded catalog summary; raw endpoint preserves complete source evidence",
                 "meaning":"observed fields; valid is not blanket economic homologation"}
 
+    @app.get("/v1/ingestion")
+    async def ingestion(request: Request, limit: int=Query(50,ge=1,le=100)):
+        return await request.app.state.store.ingestion_status(limit)
     return app

@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import threading
+import tempfile
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -137,6 +138,45 @@ def _prepare(rows: list[dict], *, stored: bool = False) -> tuple[list[dict], dic
     return ordered, summary
 
 
+
+def batch_size(rows: list[dict]) -> int:
+    """Canonical fact bytes for worker group planning; excludes transport framing."""
+    if not isinstance(rows, list) or len(rows) > MAX_BATCH_ROWS:
+        raise ValueError("batch row limit exceeded")
+    size = 0
+    for row in rows:
+        size += len(_json(_row(row)).encode("utf-8"))
+        if size > MAX_BATCH_BYTES:
+            raise ValueError("batch byte limit exceeded")
+    return size
+
+
+def _prepare_batches(batches: list[tuple[str, list[dict]]]) -> dict[str, tuple[list[dict], dict]]:
+    if not isinstance(batches, list) or not 1 <= len(batches) <= 8:
+        raise ValueError("group must contain between 1 and 8 batches")
+    prepared = {}
+    identities = {}
+    count = size = 0
+    for item in batches:
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise ValueError("group entries must be batch_id and rows pairs")
+        batch = _batch_id(item[0])
+        if batch in prepared:
+            raise BatchConflict("duplicate batch_id in group")
+        rows, summary = _prepare(item[1])
+        count += len(rows)
+        size += sum(len(_json(row).encode("utf-8")) for row in rows)
+        if count > MAX_BATCH_ROWS or size > MAX_BATCH_BYTES:
+            raise ValueError("group row or byte limit exceeded")
+        for row in rows:
+            key = _identity(row)
+            if key in identities and identities[key] != row:
+                raise BatchConflict("conflicting fact identity across group batches")
+            identities[key] = row
+        prepared[batch] = (rows, summary)
+    return prepared
+
+
 def _literal(value: str) -> str:
     # SQL identifiers are constants; runtime values normally use parameters.
     return "'" + value.replace("'", "''") + "'"
@@ -177,6 +217,7 @@ class AnalyticsSinks:
         self._dsn = lake_catalog_dsn
         self._path = lake_path
         self._lake = None
+        self._lake_temp_directory = None
         self._lock = threading.RLock()
         self._ready = False
         self._closed = False
@@ -196,6 +237,11 @@ class AnalyticsSinks:
         connection = duckdb.connect(":memory:")
         self._lake = connection
         try:
+            # The non-root worker cannot spill into WORKDIR /app/.tmp. Own a
+            # private OS temporary directory and cap spill without raising RAM.
+            self._lake_temp_directory = tempfile.TemporaryDirectory(prefix="midas-data-duckdb-")
+            self._sql(f"SET temp_directory={_literal(self._lake_temp_directory.name)}")
+            self._sql("SET max_temp_directory_size='128MB'")
             self._sql("SET threads=2")
             self._sql("SET memory_limit='256MB'")
             self._sql("LOAD ducklake")
@@ -206,9 +252,22 @@ class AnalyticsSinks:
                 f"(DATA_PATH {_literal(self._path)}, DATA_INLINING_ROW_LIMIT 0)"
             )
         except Exception:
-            connection.close()
-            self._lake = None
+            try:
+                self._dispose_lake()
+            except Exception:
+                pass
             raise AnalyticsError("DuckLake initialization failed; check image extensions and isolated catalog") from None
+
+    def _dispose_lake(self) -> None:
+        connection, self._lake = self._lake, None
+        temporary = getattr(self, "_lake_temp_directory", None)
+        self._lake_temp_directory = None
+        try:
+            if connection is not None:
+                connection.close()
+        finally:
+            if temporary is not None:
+                temporary.cleanup()
 
     def _sql(self, query: str, params: list | tuple | None = None) -> list[tuple]:
         timer = threading.Timer(LAKE_TIMEOUT_SECONDS, self._lake.interrupt)
@@ -221,7 +280,7 @@ class AnalyticsSinks:
         finally:
             timer.cancel()
 
-    def _ch(self, query: str, *, params: dict | None = None, data: list[dict] | None = None, result: bool = False) -> list[dict]:
+    def _ch(self, query: str, *, params: dict | None = None, data: list[dict] | None = None, result: bool = False, param_body: bool = False) -> list[dict]:
         settings = {
             "query": query,
             "max_execution_time": "30",
@@ -232,10 +291,17 @@ class AnalyticsSinks:
         }
         if result:
             settings["max_bytes_to_read"] = str(128 * 1024 * 1024)
-        settings.update({"param_" + key: str(value) for key, value in (params or {}).items()})
+        bindings = {"param_" + key: str(value) for key, value in (params or {}).items()}
+        if param_body and data is not None:
+            raise ValueError("multipart query parameters cannot share an insert body")
+        if not param_body:
+            settings.update(bindings)
         body = (("\n".join(_json(row) for row in data) + "\n").encode("utf-8") if data else b"")
         try:
-            with self._http.stream("POST", "", params=settings, content=body) as response:
+            with self._http.stream(
+                "POST", "", params=settings,
+                **({"files": {key: (None, value) for key, value in bindings.items()}} if param_body else {"content": body}),
+            ) as response:
                 if response.status_code != 200:
                     raise AnalyticsError(f"ClickHouse operation failed (HTTP {response.status_code})")
                 chunks = bytearray()
@@ -328,6 +394,14 @@ class AnalyticsSinks:
                 except AnalyticsError:
                     pass
                 raise
+            # DuckLake rejects set_option on transaction-local tables, so apply
+            # this idempotent storage option only after schema creation commits.
+            inlining = self._sql(
+                "SELECT value FROM lake.options() WHERE option_name='data_inlining_row_limit' "
+                "AND scope='TABLE' AND scope_entry='main.batch_receipts' LIMIT 2"
+            )
+            if inlining != [("1000",)]:
+                self._sql("CALL lake.set_option('data_inlining_row_limit', 1000, table_name => 'batch_receipts')")
             self._ch(f"CREATE DATABASE IF NOT EXISTS {CH_DATABASE}")
             ch_types = self._ch_types()
             receipt_ch = {
@@ -406,13 +480,17 @@ class AnalyticsSinks:
     def _check_identities(self, rows: list[dict], *, lake: bool) -> None:
         expected = {_identity(row): _row_hash(row) for row in rows}
         ids = sorted({row["fact_id"] for row in rows})
-        for start in range(0, len(ids), 256):
-            chunk = ids[start:start + 256]
+        if not ids:
+            return
+        chunks = [ids] if lake else [ids[start:start + 256] for start in range(0, len(ids), 256)]
+        for chunk in chunks:
             if lake:
+                # One bounded relation of IDs avoids rereading file metadata for
+                # every 256 facts. The same global conflict guard still applies.
                 records = self._sql(
-                    "SELECT source_kind,fact_id,row_hash FROM lake.facts_log WHERE fact_id IN ("
-                    + ",".join("?" for _ in chunk)
-                    + ") GROUP BY source_kind,fact_id,row_hash LIMIT 10001", chunk,
+                    "SELECT source_kind,fact_id,row_hash FROM lake.facts_log "
+                    "WHERE fact_id IN (SELECT unnest(?::VARCHAR[])) "
+                    "GROUP BY source_kind,fact_id,row_hash LIMIT 10001", [chunk],
                 )
             else:
                 bindings = {f"id{i}": value for i, value in enumerate(chunk)}
@@ -449,15 +527,18 @@ class AnalyticsSinks:
             else:
                 self._check_identities(rows, lake=True)
                 columns = (*FACT_COLUMNS, "row_hash", "batch_id")
-                # One statement per bounded chunk avoids huge parser input and
-                # keeps every fact and its receipt in the same lake transaction.
-                for start in range(0, len(rows), 100):
-                    chunk = rows[start:start + 100]
-                    values = []
-                    for row in chunk:
-                        values.extend([row[c] for c in FACT_COLUMNS] + [_row_hash(row), batch])
-                    placeholders = ",".join("(" + ",".join("?" for _ in columns) + ")" for _ in chunk)
-                    self._sql(f"INSERT INTO lake.facts_log ({','.join(columns)}) VALUES {placeholders}", values)
+                # A single insert produces one changeset, rather than a tiny
+                # Parquet file for each 100 rows. JSON is a bound parameter with
+                # explicit types: decimal values remain exact VARCHARs and JSON
+                # null remains SQL NULL. _prepare enforces the whole batch budget.
+                if rows:
+                    payload = _json([dict(row, row_hash=_row_hash(row), batch_id=batch) for row in rows])
+                    structure = _json([{column: self._lake_types()[column] for column in columns}])
+                    self._sql(
+                        f"INSERT INTO lake.facts_log ({','.join(columns)}) "
+                        f"SELECT {','.join('item.' + column for column in columns)} FROM UNNEST(from_json_strict(?::JSON, ?::JSON)) AS batch_rows(item)",
+                        [payload, structure],
+                    )
                 self._sql(
                     "CALL lake.set_commit_message('midas-data','apply_batch',extra_info=>?)",
                     [_json({"batch_id": batch, "checksum": summary["checksum"], "schema_version": SCHEMA_VERSION})],
@@ -510,6 +591,248 @@ class AnalyticsSinks:
                 raise AnalyticsError("batch not verified in both sinks; retry the same batch")
             return result
 
+
+    def _receipts_many(self, batches: list[str], *, lake: bool) -> dict[str, dict]:
+        columns = ",".join(RECEIPT_COLUMNS)
+        if lake:
+            records = self._sql(
+                f"SELECT {columns} FROM lake.batch_receipts "
+                "WHERE batch_id IN (SELECT unnest(?::VARCHAR[])) LIMIT 10001", [batches],
+            )
+            records = [dict(zip(RECEIPT_COLUMNS, r)) for r in records]
+        else:
+            records = self._ch(
+                f"SELECT {columns} FROM {CH_DATABASE}.batch_receipts_log "
+                "WHERE batch_id IN (SELECT arrayJoin(JSONExtract({batches:String},'Array(String)'))) "
+                "LIMIT 10001 FORMAT JSON", params={"batches": _json(batches)}, result=True,
+            )
+        if len(records) > MAX_BATCH_ROWS:
+            raise AnalyticsError("group receipt row limit exceeded")
+        result = {}
+        for record in records:
+            batch = record["batch_id"]
+            if batch not in batches:
+                raise AnalyticsError("unexpected group receipt")
+            record["row_count"] = int(record["row_count"])
+            previous = result.get(batch)
+            if previous is not None and any(
+                previous[key] != record[key] for key in RECEIPT_COLUMNS if key != "created_at"
+            ):
+                raise BatchConflict("conflicting batch receipts")
+            result[batch] = record
+        return result
+
+    def _read_batches(self, batches: list[str], *, lake: bool) -> dict[str, list[dict]]:
+        names = ("batch_id", *FACT_COLUMNS, "row_hash")
+        columns = ",".join(names)
+        if lake:
+            records = self._sql(
+                f"SELECT {columns} FROM lake.facts_log "
+                "WHERE batch_id IN (SELECT unnest(?::VARCHAR[])) "
+                f"GROUP BY {columns} LIMIT 10001", [batches],
+            )
+            records = [dict(zip(names, r)) for r in records]
+        else:
+            records = self._ch(
+                f"SELECT {columns} FROM {CH_DATABASE}.facts_log "
+                "WHERE batch_id IN (SELECT arrayJoin(JSONExtract({batches:String},'Array(String)'))) "
+                f"GROUP BY {columns} LIMIT 10001 FORMAT JSON",
+                params={"batches": _json(batches)}, result=True,
+            )
+        if len(records) > MAX_BATCH_ROWS:
+            raise AnalyticsError("stored group row limit exceeded")
+        result = {batch: [] for batch in batches}
+        size = 0
+        for record in records:
+            batch = record.pop("batch_id")
+            if batch not in result:
+                raise AnalyticsError("unexpected stored group batch")
+            digest = record.pop("row_hash")
+            normalized = _row(record)
+            canonical = _json(normalized).encode("utf-8")
+            size += len(canonical)
+            if size > MAX_BATCH_BYTES:
+                raise AnalyticsError("stored group byte limit exceeded")
+            if digest != hashlib.sha256(canonical).hexdigest():
+                raise BatchConflict("stored fact checksum mismatch")
+            result[batch].append(normalized)
+        return result
+
+    def _check_group_identities(self, rows: list[dict], *, lake: bool) -> None:
+        if lake:
+            self._check_identities(rows, lake=True)
+            return
+        expected = {_identity(row): _row_hash(row) for row in rows}
+        if not expected:
+            return
+        # One POST/query with bounded multipart fields avoids HTTPX's URI limit
+        # and ClickHouse's per-form-field limit. At most 20 fields of 512 UUIDs.
+        ids = sorted({row["fact_id"] for row in rows})
+        params = {f"ids{i // 512}": _json(ids[i:i + 512]) for i in range(0, len(ids), 512)}
+        arrays = ",".join("JSONExtract({" + key + ":String},'Array(String)')" for key in params)
+        records = self._ch(
+            f"SELECT source_kind,fact_id,row_hash FROM {CH_DATABASE}.facts_log "
+            f"WHERE fact_id IN (SELECT arrayJoin(arrayConcat({arrays}))) "
+            "GROUP BY source_kind,fact_id,row_hash LIMIT 10001 FORMAT JSON",
+            params=params, result=True, param_body=True,
+        )
+        if len(records) > MAX_BATCH_ROWS:
+            raise AnalyticsError("identity lookup row limit exceeded")
+        for record in records:
+            key = (record["source_kind"], record["fact_id"])
+            if key in expected and expected[key] != record["row_hash"]:
+                raise BatchConflict("fact identity already exists with different content")
+
+    def _insert_lake_group(self, table: str, records: list[dict], types: dict[str, str]) -> None:
+        if not records:
+            return
+        columns = tuple(types)
+        self._sql(
+            f"INSERT INTO lake.{table} ({','.join(columns)}) "
+            f"SELECT {','.join('item.' + c for c in columns)} "
+            "FROM UNNEST(from_json_strict(?::JSON, ?::JSON)) AS group_rows(item)",
+            [_json(records), _json([types])],
+        )
+
+    def _apply_lake_batches(self, prepared: dict[str, tuple[list[dict], dict]]) -> None:
+        self._sql("BEGIN")
+        try:
+            existing = self._receipts_many(list(prepared), lake=True)
+            new = {}
+            for batch, (rows, summary) in prepared.items():
+                receipt = existing.get(batch)
+                if receipt is not None:
+                    if not _receipt_matches(receipt, summary):
+                        raise BatchConflict("batch_id already has different DuckLake content")
+                else:
+                    new[batch] = (rows, summary)
+            if new:
+                self._check_group_identities(
+                    [row for rows, _ in prepared.values() for row in rows], lake=True,
+                )
+                self._insert_lake_group("facts_log", [
+                    dict(row, row_hash=_row_hash(row), batch_id=batch)
+                    for batch, (rows, _) in new.items() for row in rows
+                ], self._lake_types())
+                metadata = {
+                    "group_version": "midas-analytics-group-v1", "schema_version": SCHEMA_VERSION,
+                    "batches": [{"batch_id": batch, "checksum": new[batch][1]["checksum"]} for batch in sorted(new)],
+                }
+                self._sql(
+                    "CALL lake.set_commit_message('midas-data','apply_batches',extra_info=>?)",
+                    [_json(metadata)],
+                )
+                receipt_types = {
+                    c: ("BIGINT" if c == "row_count" else "TIMESTAMP WITH TIME ZONE" if c == "created_at" else "VARCHAR") for c in RECEIPT_COLUMNS
+                }
+                self._insert_lake_group("batch_receipts", [
+                    self._make_receipt(batch, summary) for batch, (_, summary) in new.items()
+                ], receipt_types)
+            self._sql("COMMIT")
+        except Exception:
+            try:
+                self._sql("ROLLBACK")
+            except AnalyticsError:
+                pass
+            raise
+
+    def _apply_ch_batches(self, prepared: dict[str, tuple[list[dict], dict]]) -> None:
+        receipts = self._receipts_many(list(prepared), lake=False)
+        for batch, (_, summary) in prepared.items():
+            if batch in receipts and not _receipt_matches(receipts[batch], summary):
+                raise BatchConflict("batch_id already has different ClickHouse content")
+        self._check_group_identities([row for rows, _ in prepared.values() for row in rows], lake=False)
+        existing = self._read_batches(list(prepared), lake=False)
+        missing = []
+        for batch, (rows, _) in prepared.items():
+            stored, _ = _prepare(existing[batch], stored=True)
+            expected = {_identity(row): row for row in rows}
+            for row in stored:
+                if expected.get(_identity(row)) != row:
+                    raise BatchConflict("partial ClickHouse batch contains unexpected facts")
+            present = {_identity(row) for row in stored}
+            missing.extend(
+                dict(row, row_hash=_row_hash(row), batch_id=batch)
+                for row in rows if _identity(row) not in present
+            )
+        if missing:
+            self._ch(f"INSERT INTO {CH_DATABASE}.facts_log FORMAT JSONEachRow", data=missing)
+        absent = [self._make_receipt(batch, summary) for batch, (_, summary) in prepared.items() if batch not in receipts]
+        if absent:
+            self._ch(f"INSERT INTO {CH_DATABASE}.batch_receipts_log FORMAT JSONEachRow", data=absent)
+
+    def apply_batches(self, batches: list[tuple[str, list[dict]]]) -> dict[str, dict]:
+        """Apply up to eight batches under one Lake commit; retain each receipt."""
+        prepared = _prepare_batches(batches)
+        with self._lock:
+            self._assert_open()
+            if not self._ready:
+                self.ensure_schema()
+            self._apply_lake_batches(prepared)
+            self._apply_ch_batches(prepared)
+            results = self._verify_batches(list(prepared))
+            for batch, (_, summary) in prepared.items():
+                result = results[batch]
+                if not result["ok"] or any(
+                    result[key] != summary[key] for key in ("count", "checksum", "source_counts", "available_frontier")
+                ):
+                    raise AnalyticsError("group not verified in both sinks; retry the same batches")
+            return results
+
+    def _verify_batches(self, batches: list[str]) -> dict[str, dict]:
+        results = {batch: {"batch_id": batch, "ok": False} for batch in batches}
+        for name, is_lake in (("lake", True), ("clickhouse", False)):
+            receipts = self._receipts_many(batches, lake=is_lake)
+            stored = self._read_batches(batches, lake=is_lake)
+            self._check_group_identities([row for rows in stored.values() for row in rows], lake=is_lake)
+            for batch in batches:
+                _, summary = _prepare(stored[batch], stored=True)
+                receipt = receipts.get(batch)
+                results[batch][name] = dict(
+                    summary, receipt_present=receipt is not None,
+                    ok=receipt is not None and _receipt_matches(receipt, summary),
+                )
+        snapshots = self._batch_snapshots({
+            batch: result["lake"]["checksum"] for batch, result in results.items() if result["lake"]["ok"]
+        })
+        for batch, result in results.items():
+            lake, ch = result["lake"], result["clickhouse"]
+            result.update({key: lake[key] for key in ("count", "checksum", "source_counts", "available_frontier")})
+            result["snapshot"] = snapshots.get(batch)
+            result["ok"] = bool(lake["ok"] and ch["ok"] and lake["checksum"] == ch["checksum"] and result["snapshot"])
+        return results
+
+    def _batch_snapshots(self, checksums: dict[str, str]) -> dict[str, dict]:
+        if not checksums:
+            return {}
+        requested = [{
+            "batch_id": batch,
+            "legacy": _json({"batch_id": batch, "checksum": checksum, "schema_version": SCHEMA_VERSION}),
+            "member": _json([{"batch_id": batch, "checksum": checksum}]),
+        } for batch, checksum in checksums.items()]
+        # Both ID and checksum must occur in the SAME member object. try_cast
+        # makes unrelated/non-JSON historical commit metadata harmless.
+        rows = self._sql(
+            "WITH requested AS (SELECT item.* FROM UNNEST(from_json_strict(?::JSON, "
+            "'[{\"batch_id\":\"VARCHAR\",\"legacy\":\"VARCHAR\",\"member\":\"VARCHAR\"}]'::JSON)) AS r(item)), "
+            "snapshots AS MATERIALIZED (SELECT snapshot_id,snapshot_time,commit_extra_info,"
+            "try_cast(commit_extra_info AS JSON) AS metadata FROM lake.snapshots()) "
+            "SELECT requested.batch_id,snapshot_id,snapshot_time FROM requested JOIN snapshots ON "
+            "commit_extra_info=requested.legacy OR ("
+            "json_extract_string(metadata,'$.group_version')='midas-analytics-group-v1' AND "
+            "json_extract_string(metadata,'$.schema_version')=? AND "
+            "json_contains(json_extract(metadata,'$.batches'),requested.member::JSON)) "
+            "QUALIFY row_number() OVER (PARTITION BY requested.batch_id ORDER BY snapshot_id)=1",
+            [_json(requested), SCHEMA_VERSION],
+        )
+        result = {}
+        for batch, snapshot_id, snapshot_time in rows:
+            if batch not in checksums or batch in result:
+                raise AnalyticsError("invalid group snapshot result")
+            result[batch] = {"snapshot_id": int(snapshot_id), "snapshot_time": _utc(snapshot_time), "scope": "batch_commit"}
+        return result
+
+
     def _assert_open(self) -> None:
         if self._closed:
             raise AnalyticsError("analytics sinks are closed")
@@ -540,8 +863,94 @@ class AnalyticsSinks:
             "WHERE commit_extra_info=? ORDER BY snapshot_id LIMIT 1", [metadata],
         )
         if not rows:
-            return None
+            return self._batch_snapshots({batch: checksum}).get(batch)
         return {"snapshot_id": int(rows[0][0]), "snapshot_time": _utc(rows[0][1]), "scope": "batch_commit"}
+
+
+    def compact_files(self, max_output_files: int = 2, min_input_files: int = 64) -> dict:
+        """Merge small active files under the caller's distributed writer lock.
+
+        The output budget is global across both tables. No snapshot expiry,
+        file deletion, checkpoint or inline-data flush is performed here.
+        """
+        if type(max_output_files) is not int or not 1 <= max_output_files <= 2:
+            raise ValueError("max_output_files must be an integer between 1 and 2")
+        if type(min_input_files) is not int or not 2 <= min_input_files <= 10_000:
+            raise ValueError("min_input_files must be an integer between 2 and 10000")
+        with self._lock:
+            self._assert_open()
+            if not self._ready:
+                self.ensure_schema()
+            remaining = max_output_files
+            result = {
+                "scope": "small_active_files", "max_output_files": max_output_files,
+                "min_input_files": min_input_files, "target_file_size_bytes": 8_000_000,
+                "max_input_file_size_bytes": 1_048_576,
+                "files_processed": 0, "files_created": 0, "tables": {},
+            }
+            for table in ("facts_log", "batch_receipts"):
+                entry = {"files_processed": 0, "files_created": 0}
+                result["tables"][table] = entry
+                if remaining == 0:
+                    entry["status"] = "output_budget_exhausted"
+                    continue
+                # This only lists catalog metadata. LIMIT caps the count needed
+                # for the threshold; it does not claim to bound metadata scanned.
+                counts = self._sql(
+                    "SELECT count(*) FROM (SELECT DISTINCT data_file "
+                    "FROM ducklake_list_files('lake', ?, schema => 'main') "
+                    "WHERE data_file_size_bytes < 1048576 AND delete_file IS NULL LIMIT ?)",
+                    [table, min_input_files],
+                )
+                if len(counts) != 1 or len(counts[0]) != 1:
+                    raise AnalyticsError("invalid DuckLake file metadata result")
+                observed = int(counts[0][0])
+                entry["eligible_files_observed"] = observed
+                entry["count_capped_at_threshold"] = observed == min_input_files
+                if observed < min_input_files:
+                    entry["status"] = "below_threshold"
+                    continue
+                size = self._sql(
+                    "SELECT value FROM lake.options() WHERE option_name='target_file_size' "
+                    "AND scope='TABLE' AND scope_entry=? LIMIT 2", ["main." + table],
+                )
+                # DuckLake persists ParseMemoryLimit('8MB') as decimal bytes.
+                if size != [("8000000",)]:
+                    self._sql(
+                        "CALL lake.set_option('target_file_size', '8MB', table_name => ?, schema => 'main')",
+                        [table],
+                    )
+                # Parallel COPY groups exceeded the bounded spill budget in the
+                # live gate. Merge one group per table with one execution thread;
+                # restore the caller's setting even when the merge fails.
+                previous_threads = int(self._sql("SELECT current_setting('threads')")[0][0])
+                try:
+                    self._sql("SET threads=1")
+                    merged = self._sql(
+                        "CALL ducklake_merge_adjacent_files('lake', ?, schema => 'main', "
+                        "max_compacted_files => ?, max_file_size => 1048576)", [table, 1],
+                    )
+                finally:
+                    self._sql(f"SET threads={previous_threads}")
+                processed = created = 0
+                for record in merged:
+                    if len(record) != 4 or record[0] != "main" or record[1] != table:
+                        raise AnalyticsError("invalid DuckLake compaction result")
+                    inputs, outputs = int(record[2]), int(record[3])
+                    if inputs < 1 or outputs != 1:
+                        raise AnalyticsError("invalid DuckLake compaction counts")
+                    processed += inputs
+                    created += outputs
+                if created > 1 or created > remaining:
+                    raise AnalyticsError("DuckLake compaction exceeded output budget")
+                entry.update(
+                    status="compacted" if created else "no_mergeable_group",
+                    files_processed=processed, files_created=created,
+                )
+                result["files_processed"] += processed
+                result["files_created"] += created
+                remaining -= created
+            return result
 
     def snapshot_info(self) -> dict:
         with self._lock:
@@ -562,9 +971,13 @@ class AnalyticsSinks:
         with self._lock:
             if self._closed:
                 return
-            if self._lake is not None:
-                self._lake.close()
-                self._lake = None
-            self._http.close()
-            self._closed = True
-            self._ready = False
+            try:
+                try:
+                    self._dispose_lake()
+                finally:
+                    self._http.close()
+            except Exception:
+                raise AnalyticsError("analytics sinks close failed") from None
+            finally:
+                self._closed = True
+                self._ready = False

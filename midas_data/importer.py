@@ -127,18 +127,24 @@ def load_export(path: Path) -> list[LegacyRow]:
     return rows
 
 
-def safe_request_params(params: dict[str, Any]) -> dict[str, Any]:
+def safe_request_params(params: dict[str, Any], *, additional_allowed: frozenset[str] = frozenset(), allow_lists: bool = False) -> dict[str, Any]:
     """Keep only observed query keys; never copy headers or arbitrary nesting."""
     sources = [params]
     if 'query' in params:
         if not isinstance(params['query'], dict):
             raise ImportFailure('invalid_request_query')
         sources.append(params['query'])
+    if additional_allowed and 'body' in params:
+        if not isinstance(params['body'], dict):
+            raise ImportFailure('invalid_request_body')
+        sources.append(params['body'])
     result = {}
     for source in sources:
-        for key in sorted(ALLOWED_PARAMS & source.keys()):
+        for key in sorted((ALLOWED_PARAMS | additional_allowed) & source.keys()):
             value = source[key]
-            if value is not None and not isinstance(value, (str, int, bool)):
+            bounded_list = (allow_lists and isinstance(value, list) and len(value) <= 100
+                            and all(isinstance(item, str) and len(item) <= 256 for item in value))
+            if value is not None and not isinstance(value, (str, int, bool)) and not bounded_list:
                 raise ImportFailure('invalid_allowlisted_parameter')
             if key in result and (type(result[key]) is not type(value) or result[key] != value):
                 raise ImportFailure('conflicting_request_parameter')
@@ -146,7 +152,7 @@ def safe_request_params(params: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def verify_row(row: LegacyRow) -> VerifiedCapture:
+def verify_row(row: LegacyRow, *, additional_allowed: frozenset[str] = frozenset(), allow_lists: bool = False) -> VerifiedCapture:
     """Bound decompression and require exact raw length plus both legacy hashes."""
     try:
         compressed = base64.b64decode(row.payload_base64, validate=True)
@@ -172,7 +178,7 @@ def verify_row(row: LegacyRow) -> VerifiedCapture:
         metadata = CaptureMetadata(capture_id=row.call_id, source_kind='legacy_gmgn',
             endpoint=row.endpoint, chain=row.chain, requested_at=row.requested_at_utc,
             received_at=row.received_at_utc, source_event_at=None, http_status=row.http_status,
-            request_params=safe_request_params(row.request_params), evidence_kind='original_response')
+            request_params=safe_request_params(row.request_params, additional_allowed=additional_allowed, allow_lists=allow_lists), evidence_kind='original_response')
     except ValidationError:
         raise ImportFailure('invalid_capture_metadata') from None
     verified = VerifiedCapture(metadata, raw, digest)

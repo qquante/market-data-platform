@@ -2,7 +2,7 @@
 
 Implementação independente da fundação de dados, autorizada em 2026-09-08. Controle: [TASKS](../TASKS.md), [GOALS](../GOALS.md), [SESSIONS](../SESSIONS.md) e [ownership](../EXECUTION_MAP.md). O projeto Compose é `midas-data`; o legado `midas-fomo` continua separado.
 
-Resultados executados e evidências: [RESULTADOS](RESULTADOS.md).
+Fundação inicial: [RESULTADOS](RESULTADOS.md). Continuação: [coleta contínua](CONTINUOUS.md), [contratos v3](FIELD_CONTRACTS.md) e [plano histórico](MIGRATION.md). As provas da continuação estão em [CONTINUOUS_RESULTADOS](CONTINUOUS_RESULTADOS.md).
 
 ## Fluxo e autoridades
 
@@ -78,7 +78,8 @@ PowerShell 7 e Docker Desktop Linux containers, na raiz do workspace:
 | /v1/captures/{id}/raw | Recuperar os bytes e conferir X-Content-SHA256. |
 | /v1/observations | Série observada de chain/token/metric, intervalo máximo de 7 dias, até 5.000 fatos por página; `after_seq` e corte fixo. |
 | /v1/as-known | Último fato por métrica/unidade/contrato até event_at e knowledge_cutoff. |
-| /v1/catalog | Catálogo amostral de até 100 capturas recentes; até 1.000 grupos, sem agregação irrestrita do histórico. |
+| /v1/ingestion | Checkpoint, atraso, ledger e exceções da ponte contínua; até 100 exceções por resposta. |
+| /v1/catalog | Catálogo de uma capture_id da origem informada ou até 20 capturas recentes; até 1.000 grupos, com has_more/truncated explícitos. |
 | /v1/status | Filas, capturas por estado/origem, projeções pendentes e heartbeat do worker. |
 
 Para consultar uma curva diária observada, use `observations` com a métrica e limites do dia UTC. Os itens vêm em ordem de sequência de ingestão para paginação estável; ordene por `occurred_at` na apresentação. Não são candles interpolados nem reconstrução de ticks ausentes. `include_unverified=false` é o padrão; true exige interpretar a qualidade retornada.
@@ -113,3 +114,4 @@ Referências: [DuckLake com catálogo PostgreSQL](https://ducklake.select/docs/s
 `renormalize` aplica a versão atual a capturas da origem escolhida que ainda não têm essa versão (até100 por execução). Conserva bytes e resultados anteriores; gera novos fatos/recibos e publica uma nova fronteira. O worker verifica os destinos após retomar. Queries da API selecionam a interpretação mais recente **por captura, disponível no corte informado**. Um corte antigo continua mostrando a interpretação antiga; um corte novo não soma versões da mesma captura. Os logs e as views técnicas dos sinks mantêm todas as interpretações para auditoria: análises SQL diretas devem selecionar a versão elegível antes de agregar.
 
 A amostra real revelou a necessidade de aceitar ranking com envelope duplo de sucesso e corrigir `token_info.launchpad_status` para enum inteiro. A correção recebe `gmgn-p0-v2`; recibos de `gmgn-p0-v1` permanecem intactos. Cotações zero continuam impedidas de passar como preço positivo; seu significado na fonte não foi presumido.
+A continuação homologou contratos adicionais em gmgn-p0-v3, preservando v1/v2, e conectou a ponte contínua ao coletor existente. Consulte [resultados da continuação](CONTINUOUS_RESULTADOS.md), [contratos campo a campo](FIELD_CONTRACTS.md), [operação](CONTINUOUS.md) e [plano histórico](MIGRATION.md). A versão da interpretação é distinta da versão do esquema analítico e do snapshot de armazenamento.

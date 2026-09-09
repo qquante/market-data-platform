@@ -143,3 +143,47 @@ def test_fact_contract_enforces_token_identity_byte_limit():
              token_address='\u00e9' * 129, metric='price', value_text='1', value_type='decimal',
              unit='usd_per_token', category='valuation', occurred_at='2026-09-08T12:00:00Z',
              time_basis='received', pointer='/price/price', quality='valid', contract_version='gmgn.token_info.v1')
+
+
+@pytest.mark.parametrize('endpoint', ['hot_searches', 'future_global_endpoint'])
+def test_raw_capture_can_preserve_absent_chain_without_inventing_namespace(endpoint):
+    meta = CaptureMetadata(**metadata_values(endpoint=endpoint, chain=None, request_params={}))
+    assert meta.chain is None
+    assert meta.model_dump(mode='json')['chain'] is None
+
+
+@pytest.mark.parametrize('endpoint', ['token_info', 'market_rank'])
+def test_token_adapters_reject_missing_chain(endpoint):
+    with pytest.raises(ValidationError, match='explicit capture chain'):
+        CaptureMetadata(**metadata_values(endpoint=endpoint, chain=None, request_params={}))
+
+
+@pytest.mark.parametrize('capture_chain, parameter_chain', [(None, 'sol'), ('sol', 'eth'), (None, 0)])
+def test_explicit_query_chain_must_match_a_real_metadata_chain(capture_chain, parameter_chain):
+    with pytest.raises(ValidationError, match='chain conflicts'):
+        CaptureMetadata(**metadata_values(endpoint='hot_searches', chain=capture_chain, request_params={'chain': parameter_chain}))
+
+
+def test_raw_capture_chain_remains_required_as_an_explicit_nullable_field():
+    values = metadata_values(endpoint='hot_searches')
+    del values['chain']
+    with pytest.raises(ValidationError):
+        CaptureMetadata(**values)
+
+
+def test_fact_chain_is_still_non_nullable():
+    from midas_data.contracts import Fact
+    values = dict(fact_id=UUID('dc0d7462-2e7c-4ac9-b9cc-c849a2c1c31c'),
+                  capture_id=UUID('317f3564-e11f-4fa1-a5c4-03f01b8bd705'), chain=None,
+                  token_address='FixtureToken', metric='price', value_text='1', value_type='decimal',
+                  unit='usd_per_token', category='valuation', occurred_at='2026-09-08T12:00:00Z',
+                  time_basis='received', pointer='/price', quality='valid', contract_version='gmgn.market_rank.v3')
+    with pytest.raises(ValidationError):
+        Fact(**values)
+
+
+@pytest.mark.parametrize('capture_chain', [None, 'sol'])
+def test_null_query_chain_preserves_unspecified_legacy_parameter(capture_chain):
+    meta = CaptureMetadata(**metadata_values(endpoint='hot_searches', chain=capture_chain, request_params={'chain': None}))
+    assert meta.chain == capture_chain
+    assert 'chain' in meta.request_params and meta.request_params['chain'] is None

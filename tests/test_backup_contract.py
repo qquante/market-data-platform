@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import base64
+import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,6 +15,59 @@ import unittest
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "gmgn-data-backup.ps1"
 POWERSHELL = shutil.which("pwsh")
 ARTIFACTS = ("midas_data.dump", "midas_lake.dump", "raw.tar", "lake.tar", "baseline.json")
+
+
+
+@unittest.skipUnless(SCRIPT.exists(), "Repository backup script required")
+class EvidenceFormulaTests(unittest.TestCase):
+    """Execute only pure formula helpers, without database or Docker imports."""
+
+    @classmethod
+    def setUpClass(cls):
+        script = SCRIPT.read_text(encoding="utf-8-sig")
+        probe = re.search(r"\$script:ProbeCode = @'\n(.*?)\n'@", script, re.S).group(1)
+        tree = ast.parse(probe)
+        names = {"delivery_fields", "row_expression", "delivery_sql"}
+        helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
+        cls.formula = {}
+        exec(compile(ast.Module(body=helpers, type_ignores=[]), "backup-pure-helpers", "exec"), cls.formula)
+
+    def test_rebuild_reconciles_delivery_without_hiding_attempt_or_content_changes(self):
+        derived = self.formula["delivery_fields"](2)
+        self.assertEqual(derived, ("analytics_applied_at", "analytics_receipt", "analytics_retry_at", "analytics_last_error"))
+        before = dict(batch_id="fixture", fact_count=2, analytics_attempts=3,
+                      analytics_applied_at=None, analytics_receipt=None,
+                      analytics_retry_at="2026-09-09T01:00:00Z", analytics_last_error="sink_unavailable")
+        after = dict(before, analytics_applied_at="2026-09-09T02:00:00Z", analytics_receipt={"ok": True},
+                     analytics_retry_at=None, analytics_last_error=None)
+        project = lambda row: {key: value for key, value in row.items() if key not in derived}
+        delivery = lambda row: [row["batch_id"], *(row.get(key) for key in derived)]
+        digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+        self.assertEqual(digest(project(before)), digest(project(after)))
+        self.assertNotEqual(digest(delivery(before)), digest(delivery(after)))
+        for field, value in (("analytics_attempts", 4), ("fact_count", 1), ("batch_id", "other")):
+            with self.subTest(field=field):
+                self.assertNotEqual(digest(project(before)), digest(project(dict(before, **{field: value}))))
+        for field in derived:
+            with self.subTest(writer_changes=field):
+                self.assertNotEqual(digest(delivery(before)), digest(delivery(dict(before, **{field: "changed"}))))
+
+    def test_legacy_formula_is_unchanged_and_new_formula_preserves_other_tables(self):
+        expression = self.formula["row_expression"]
+        self.assertEqual(expression("normalization_runs", True, 1),
+                         "to_jsonb(t) - ARRAY['analytics_applied_at','analytics_receipt']")
+        self.assertEqual(self.formula["delivery_sql"](1),
+                         "SELECT jsonb_build_array(batch_id,analytics_applied_at,analytics_receipt)::text AS doc FROM normalization_runs ORDER BY batch_id")
+        self.assertNotIn("analytics_attempts", expression("normalization_runs", True, 2))
+        self.assertEqual(expression("captures", True, 2), "to_jsonb(t)")
+        self.assertEqual(expression("normalization_runs", False, 2), "to_jsonb(t)")
+
+    def test_new_delivery_formula_tolerates_schema_before_migration_005(self):
+        self.assertEqual(self.formula["delivery_sql"](2),
+                         "SELECT jsonb_build_array(batch_id,analytics_applied_at,analytics_receipt,to_jsonb(r)->'analytics_retry_at',to_jsonb(r)->'analytics_last_error')::text AS doc FROM normalization_runs r ORDER BY batch_id")
+        for version in (0, 3):
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "unsupported_evidence_version"):
+                self.formula["delivery_fields"](version)
 
 
 @unittest.skipUnless(POWERSHELL and SCRIPT.exists(), "Host PowerShell 7 and repository scripts required")
@@ -156,6 +211,136 @@ Assert-FreshRestore 'midas-data-restore-v2'
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+
+
+    def test_failure_pauses_and_resumes_running_bridge(self):
+        with tempfile.TemporaryDirectory() as temp:
+            backup = str(Path(temp) / "new-backup").replace("'", "''")
+            result = self.ps(r"""
+$script:BackupPath = '__BACKUP__'
+$script:calls = [Collections.Generic.List[string]]::new()
+function Get-ProjectVolumes { return @{} }
+function Get-Images { return @{worker='image'} }
+function Get-ConfigDigests { return @{} }
+function Invoke-Docker { return 'image' }
+function Invoke-Compose([string]$Project,[string[]]$Arguments) {
+    if ($Project -cne 'midas-data') { throw 'Wrong project' }
+    if ($Arguments[0] -eq 'ps') { return @('postgres','api','bridge','worker') }
+    $script:calls.Add(($Arguments -join ' '))
+}
+function Assert-NoOtherWriters { throw 'simulated source refusal' }
+try { Invoke-Backup } catch {
+    if ($_.Exception.Message -cne 'simulated source refusal') { throw }
+}
+if (($script:calls -join '|') -cne 'stop --timeout 60 api bridge worker|start api bridge worker') {
+    throw 'Running bridge was not preserved in the pause/resume set'
+}
+'passed'
+""".replace("__BACKUP__", backup))
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_restore_rejects_writers_before_docker(self):
+        for token in ("api", "worker", "bridge", "ingestion", "--profile=ingestion"):
+            with self.subTest(token=token):
+                result = self.ps(r"""
+function Invoke-Docker { throw 'Docker must not be reached' }
+Invoke-Compose 'midas-data-restore-v3' @('up','__TOKEN__')
+""".replace("__TOKEN__", token))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Restore commands cannot target", result.stderr)
+                self.assertNotIn("Docker must not be reached", result.stderr)
+
+    def test_config_fingerprints_exclude_both_env_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            migrations = root / "data_platform" / "midas_data" / "migrations"
+            migrations.mkdir(parents=True)
+            (migrations / "004_bridge.sql").write_text("fixture migration")
+            (migrations / "005_analytics_retry.sql").write_text("fixture retry migration")
+            envs = root / ".data" / "gmgn-data"
+            envs.mkdir(parents=True)
+            (envs / "runtime.env").write_text("must not be read")
+            (envs / "bridge.env").write_text("must not be read")
+            escaped = str(root).replace("'", "''")
+            result = self.ps(r"""
+$script:Workspace = '__ROOT__'
+function Get-FileDigest([string]$Path) {
+    if ($Path.EndsWith('.env')) { throw 'Credential file was read' }
+    return 'fixture-hash'
+}
+$config=Get-ConfigDigests
+if ($config.Count -ne 5 -or -not $config.Contains('data_platform/midas_data/migrations/004_bridge.sql') -or
+    -not $config.Contains('data_platform/midas_data/migrations/005_analytics_retry.sql')) {
+    throw 'Migration fingerprint missing'
+}
+""".replace("__ROOT__", escaped))
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+
+    def test_evidence_accepts_unique_json_after_real_duckdb_progress_prefix(self):
+        result = self.ps(r"""
+function Invoke-Compose {
+    $progressPrefix=' 99% '+([string][char]0x2595)+(([string][char]0x2588)*65)+' '
+    if ($progressPrefix.Length -ne 72) { throw 'Fixture must reproduce the observed prefix length' }
+    return @('Container fixture Starting',($progressPrefix+'MIDAS_BACKUP_EVIDENCE={"raw":{"objects":2},"ready_batches":3}'))
+}
+$actual=Get-Evidence 'midas-data-restore-test'
+if ($actual.raw.objects -ne 2 -or $actual.ready_batches -ne 3) { throw 'Evidence was not preserved' }
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_evidence_rejects_missing_and_duplicate_markers(self):
+        for lines in (
+            "@('progress only')",
+            "@('MIDAS_BACKUP_EVIDENCE={}', 'MIDAS_BACKUP_EVIDENCE={}')",
+            "@('MIDAS_BACKUP_EVIDENCE={}MIDAS_BACKUP_EVIDENCE={}')",
+        ):
+            with self.subTest(lines=lines):
+                result = self.ps(r"""
+function Invoke-Compose { return __LINES__ }
+$null=Get-Evidence 'midas-data-restore-test'
+""".replace("__LINES__", lines))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("no unique result", result.stderr)
+
+    def test_evidence_invalid_json_error_does_not_expose_payload(self):
+        result = self.ps(r"""
+function Invoke-Compose { return 'MIDAS_BACKUP_EVIDENCE={postgresql://fixture-secret}' }
+$null=Get-Evidence 'midas-data-restore-test'
+""")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid JSON", result.stderr)
+        self.assertNotIn("fixture-secret", result.stdout+result.stderr)
+
+
+    def test_evidence_version_supports_legacy_and_rejects_unrecognized_baselines(self):
+        result = self.ps(r"""
+if ((Get-EvidenceVersion ('{}' | ConvertFrom-Json)) -ne 1) { throw 'Legacy baseline rejected' }
+if ((Get-EvidenceVersion ('{"evidence_schema_version":2}' | ConvertFrom-Json)) -ne 2) { throw 'Current baseline rejected' }
+foreach ($json in @('{"evidence_schema_version":1}', '{"evidence_schema_version":3}',
+                    '{"evidence_schema_version":"2"}', '{"evidence_schema_version":true}',
+                    '{"evidence_schema_version":null}')) {
+    $rejected=$false
+    try { $null=Get-EvidenceVersion ($json | ConvertFrom-Json) }
+    catch { $rejected=$_.Exception.Message -eq 'Unsupported backup evidence schema version.' }
+    if (-not $rejected) { throw 'Unsupported version accepted' }
+}
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_probe_receives_current_default_and_explicit_legacy_version(self):
+        result = self.ps(r"""
+$script:versions=[Collections.Generic.List[string]]::new()
+function Invoke-Compose([string]$Project,[string[]]$Arguments) {
+    if ($Project -ne 'midas-data-restore-test') { throw 'Wrong target' }
+    $script:versions.Add($Arguments[-1])
+    return 'MIDAS_BACKUP_EVIDENCE={"ok":true}'
+}
+$null=Get-Evidence 'midas-data-restore-test'
+$null=Get-Evidence 'midas-data-restore-test' -EvidenceVersion 1
+if (($script:versions -join ',') -ne '2,1') { throw 'Probe evidence versions not forwarded' }
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ Unknown shapes still receive a complete bounded field catalogue, never facts.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 import json
 import re
@@ -16,7 +16,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from .contracts import (CaptureMetadata, Fact, FieldObservation, Issue, NormalizationResult,
                         MAX_POINTER_BYTES, MAX_TOKEN_ADDRESS_BYTES)
 
-NORMALIZER_VERSION = 'gmgn-p0-v2'
+NORMALIZER_VERSION = 'gmgn-p0-v3'
 MAX_RAW_BYTES = 8 * 1024 * 1024
 MAX_JSON_NODES = 20_000  # Includes root, containers and leaves; no silent truncation.
 MAX_JSON_DEPTH = 32  # Root depth is zero.
@@ -45,69 +45,131 @@ class _Spec:
     nonnegative: bool = False
     positive: bool = False
     allowed_integers: frozenset[int] | None = None
+    fraction: bool = False
+    reason: str | None = None
+    supported_chains: frozenset[str] | None = None
 
 
 def _specs(endpoint: str) -> dict[tuple[str, ...], _Spec]:
-    """Whitelist exact paths. Similar names and aliases are not equivalent."""
+    """Exact provider paths; documented contracts are endpoint-specific.
+
+    FIELD_CONTRACTS.md and contracts/gmgn-p0-v3.json record the evidence and
+    limitations. Valid is a provider-field contract, never an on-chain verdict.
+    """
     specs: dict[tuple[str, ...], _Spec] = {}
     for name in ('name', 'symbol'):
         specs[(name,)] = _Spec(name, 'string', 'identity', quality='valid')
-    for name in ('decimals', 'holder_count'):
-        specs[(name,)] = _Spec(name, 'integer', 'supply' if name == 'decimals' else 'holders', nonnegative=True)
+    specs[('decimals',)] = _Spec('decimals', 'integer', 'supply', nonnegative=True,
+                               reason='exact_path_scale_contract_unverified')
+    specs[('holder_count',)] = _Spec('holder_count', 'integer', 'holders', 'count', 'valid', nonnegative=True,
+                                    reason='provider_unique_holder_count')
     for name in ('total_supply', 'circulating_supply', 'max_supply'):
-        specs[(name,)] = _Spec(name, 'decimal', 'supply', nonnegative=True)
-    for name in ('creation_timestamp', 'open_timestamp', 'migrated_timestamp'):
-        # Retain provider numbers. This adapter does not choose seconds vs ms.
-        specs[(name,)] = _Spec(name, 'integer', 'temporal', nonnegative=True)
-    for name in ('liquidity', 'initial_liquidity'):
-        # Scope differs by endpoint; no pool/token aggregation is implied.
-        specs[(name,)] = _Spec(name, 'decimal', 'liquidity', nonnegative=True)
+        specs[(name,)] = _Spec(name, 'decimal', 'supply', nonnegative=True,
+                              reason='human_vs_atomic_supply_scale_unverified')
+    for name in ('creation_timestamp', 'open_timestamp'):
+        # These are event attributes of the token. They never replace the
+        # snapshot clock, and zero is not accepted as a real 1970 event.
+        specs[(name,)] = _Spec(name, 'integer', 'temporal', 'unix_second', 'valid', positive=True,
+                              reason='provider_event_attribute_unix_seconds')
+    specs[('migrated_timestamp',)] = _Spec('migrated_timestamp', 'integer', 'temporal', nonnegative=True,
+                                         reason='exact_migration_timestamp_path_unit_unverified')
+    specs[('liquidity',)] = _Spec('liquidity', 'decimal', 'liquidity', nonnegative=True,
+                                 reason='liquidity_currency_pool_scope_unverified')
+    specs[('initial_liquidity',)] = _Spec('initial_liquidity', 'decimal', 'liquidity', nonnegative=True,
+                                         reason='initial_liquidity_currency_event_scope_unverified')
     for name in ('launchpad', 'launchpad_status', 'launchpad_platform'):
-        specs[(name,)] = _Spec(name, 'string', 'launch')
+        specs[(name,)] = _Spec(name, 'string', 'launch', reason='endpoint_launchpad_vocabulary_unverified')
     for name in ('launchpad_progress', 'locked_ratio'):
-        specs[(name,)] = _Spec(name, 'decimal', 'risk')
+        specs[(name,)] = _Spec(name, 'decimal', 'risk', reason='endpoint_ratio_scale_denominator_unverified')
 
     if endpoint == 'token_info':
-        # token_info documents numeric 0/1/2. Ranking status has a different
-        # source contract and remains its original unverified string field.
+        specs[('decimals',)] = _Spec('decimals', 'integer', 'supply', 'decimal_places', 'valid', nonnegative=True)
+        specs[('circulating_supply',)] = _Spec('circulating_supply', 'decimal', 'supply', 'token', 'valid', nonnegative=True,
+                                             reason='provider_human_token_units_no_decimal_rescaling')
+        specs[('liquidity',)] = _Spec('liquidity', 'decimal', 'liquidity', 'usd', 'valid', nonnegative=True,
+                                      reason='provider_main_pool_liquidity_usd')
+        for name in ('launchpad', 'launchpad_platform'):
+            specs[(name,)] = _Spec(name, 'string', 'launch', quality='valid')
+        # token_info numeric 0/1/2 is not the ranking string status vocabulary.
         specs[('launchpad_status',)] = _Spec('launchpad_status', 'integer', 'launch',
             quality='valid', allowed_integers=frozenset({0, 1, 2}))
-        # USD/token is documented for this exact path. Valid means this adapter
-        # contract passed, not independent verification of upstream economics.
+        for name in ('launchpad_progress', 'locked_ratio'):
+            specs[(name,)] = _Spec(name, 'decimal', 'risk', 'ratio', 'valid', fraction=True)
         specs[('price', 'price')] = _Spec('price', 'decimal', 'valuation', 'usd_per_token', 'valid', positive=True)
-        specs[('ath_price',)] = _Spec('ath_price', 'decimal', 'valuation', positive=True)
-        specs[('migration_market_cap',)] = _Spec('migration_market_cap', 'decimal', 'valuation', nonnegative=True)
+        specs[('ath_price',)] = _Spec('ath_price', 'decimal', 'valuation', 'usd_per_token', 'valid', positive=True,
+                                    reason='provider_reported_ath_price_peak_time_unspecified')
+        specs[('migration_market_cap',)] = _Spec('migration_market_cap', 'decimal', 'valuation', 'usd', nonnegative=True,
+                                               reason='migration_cap_supply_basis_event_quote_unverified')
         for name in (
             'top_10_holder_rate', 'dev_team_hold_rate', 'top_rat_trader_percentage',
             'top_bundler_trader_percentage', 'top_entrapment_trader_percentage', 'bot_degen_rate',
         ):
-            specs[('stat', name)] = _Spec(name, 'decimal', 'risk')
-        specs[('stat', 'bot_degen_count')] = _Spec('bot_degen_count', 'integer', 'holders', nonnegative=True)
+            specs[('stat', name)] = _Spec(name, 'decimal', 'risk', reason='ratio_scale_denominator_window_unverified')
+        specs[('stat', 'top_10_holder_rate')] = _Spec('top_10_holder_rate', 'decimal', 'risk', 'ratio', 'valid', fraction=True,
+                                                    reason='provider_top10_supply_share')
+        for name in ('top_rat_trader_percentage', 'top_bundler_trader_percentage', 'top_entrapment_trader_percentage'):
+            specs[('stat', name)] = replace(specs[('stat', name)], reason='volume_share_scale_window_unverified')
+        specs[('stat', 'bot_degen_count')] = _Spec('bot_degen_count', 'integer', 'holders', 'count', 'valid', nonnegative=True)
         for name in ('smart_wallets', 'renowned_wallets', 'sniper_wallets'):
-            specs[('wallet_tags_stat', name)] = _Spec(name, 'integer', 'holders', nonnegative=True)
-        for name in ('twitter_username', 'twitter', 'telegram', 'website', 'description'):
-            specs[('link', name)] = _Spec(name, 'string', 'social')
+            specs[('wallet_tags_stat', name)] = _Spec(name, 'integer', 'holders', 'count', 'valid', nonnegative=True,
+                                                     reason='provider_tagged_wallet_count_methodology_unspecified')
+        for name in ('twitter_username', 'telegram', 'website', 'description'):
+            specs[('link', name)] = _Spec(name, 'string', 'social', quality='valid', reason='provider_untrusted_metadata_text')
+        specs[('link', 'twitter')] = _Spec('twitter', 'string', 'social', reason='undocumented_twitter_alias_not_username_or_url')
         for window in ('1m', '5m', '1h', '6h', '24h'):
-            specs[('price', f'price_{window}')] = _Spec(f'window_reference_price_{window}', 'decimal', 'valuation', 'usd_per_token', positive=True)
+            specs[('price', f'price_{window}')] = _Spec(f'window_reference_price_{window}', 'decimal', 'valuation',
+                'usd_per_token', 'valid', positive=True, reason='provider_price_at_start_of_named_window')
             for name in ('volume', 'buy_volume', 'sell_volume'):
-                specs[('price', f'{name}_{window}')] = _Spec(f'{name}_{window}', 'decimal', 'flow', 'usd', nonnegative=True)
+                specs[('price', f'{name}_{window}')] = _Spec(f'{name}_{window}', 'decimal', 'flow', 'usd', 'valid',
+                    nonnegative=True, reason='provider_volume_named_window_no_cross_window_sum')
             for name in ('buys', 'sells', 'swaps'):
-                specs[('price', f'{name}_{window}')] = _Spec(f'{name}_{window}', 'integer', 'flow', 'count', nonnegative=True)
+                specs[('price', f'{name}_{window}')] = _Spec(f'{name}_{window}', 'integer', 'flow', 'count', 'valid',
+                    nonnegative=True, reason='provider_transaction_count_named_window')
     elif endpoint == 'market_rank':
-        for name in ('price', 'market_cap', 'history_highest_market_cap'):
-            specs[(name,)] = _Spec(name, 'decimal', 'valuation', positive=name == 'price', nonnegative=name != 'price')
+        specs[('launchpad_platform',)] = _Spec('launchpad_platform', 'string', 'launch', quality='valid')
+        specs[('price',)] = _Spec('price', 'decimal', 'valuation', 'usd_per_token', 'valid', positive=True)
+        for name in ('market_cap', 'history_highest_market_cap'):
+            specs[(name,)] = _Spec(name, 'decimal', 'valuation', 'usd', 'valid', nonnegative=True,
+                                  reason='provider_reported_usd_cap_supply_basis_unspecified')
+        specs[('liquidity',)] = _Spec('liquidity', 'decimal', 'liquidity', 'usd', nonnegative=True,
+                                     reason='ranking_liquidity_pool_vs_aggregate_scope_unverified')
         for name in (
             'buy_tax', 'sell_tax', 'rug_ratio', 'bundler_rate', 'bundler_trader_amount_rate',
             'insider_rate', 'rat_trader_amount_rate', 'entrapment_ratio', 'top_10_holder_rate',
             'top70_sniper_hold_rate', 'dev_team_hold_rate', 'burn_ratio', 'bot_degen_rate',
         ):
-            specs[(name,)] = _Spec(name, 'decimal', 'risk')
-        for name in ('swaps', 'buys', 'sells', 'visiting_count', 'smart_degen_count', 'renowned_count', 'bot_degen_count'):
-            specs[(name,)] = _Spec(name, 'integer', 'flow' if name in {'swaps', 'buys', 'sells'} else 'holders', nonnegative=True)
-        for name in ('volume', 'price_change_percent', 'price_change_percent1m', 'price_change_percent5m', 'price_change_percent1h'):
-            specs[(name,)] = _Spec(name, 'decimal', 'flow' if name == 'volume' else 'valuation', nonnegative=name == 'volume')
-        for name in ('is_honeypot', 'is_open_source', 'is_renounced', 'renounced_mint', 'renounced_freeze_account', 'is_wash_trading', 'creator_close'):
-            specs[(name,)] = _Spec(name, 'boolean', 'risk')
+            specs[(name,)] = _Spec(name, 'decimal', 'risk', reason='ratio_scale_denominator_window_unverified')
+        for name in ('buy_tax', 'sell_tax'):
+            specs[(name,)] = replace(specs[(name,)], reason='ranking_tax_scale_unverified_empty_sentinel_not_converted')
+        for name in ('bundler_trader_amount_rate', 'insider_rate', 'burn_ratio'):
+            specs[(name,)] = replace(specs[(name,)], reason='exact_ranking_path_semantics_unverified_no_alias')
+        for name in ('bundler_rate', 'rat_trader_amount_rate'):
+            specs[(name,)] = replace(specs[(name,)], reason='volume_share_scale_window_unverified')
+        specs[('top_10_holder_rate',)] = _Spec('top_10_holder_rate', 'decimal', 'risk', 'ratio', 'valid', fraction=True,
+                                             reason='provider_top10_supply_share')
+        specs[('rug_ratio',)] = _Spec('rug_ratio', 'decimal', 'risk', 'score_0_1', 'valid', fraction=True,
+                                    reason='provider_risk_score_not_calibrated_probability')
+        for name in ('swaps', 'buys', 'sells'):
+            specs[(name,)] = _Spec(name, 'integer', 'flow', 'count', nonnegative=True,
+                                  reason='queried_window_not_encoded_in_fact')
+        specs[('visiting_count',)] = _Spec('visiting_count', 'integer', 'attention', nonnegative=True,
+                                         reason='visit_heat_unique_population_window_unverified')
+        for name in ('smart_degen_count', 'renowned_count', 'bot_degen_count'):
+            specs[(name,)] = _Spec(name, 'integer', 'holders', 'count', 'valid', nonnegative=True,
+                                  reason='provider_tagged_wallet_count_methodology_unspecified')
+        specs[('volume',)] = _Spec('volume', 'decimal', 'flow', 'usd', nonnegative=True,
+                                  reason='queried_window_not_encoded_in_fact')
+        for name in ('price_change_percent', 'price_change_percent1m', 'price_change_percent5m', 'price_change_percent1h'):
+            specs[(name,)] = _Spec(name, 'decimal', 'valuation', reason='percent_vs_ratio_documentation_conflict')
+        for name in ('is_honeypot', 'is_open_source', 'is_renounced', 'renounced_mint', 'renounced_freeze_account'):
+            chains = (frozenset({'bsc', 'base'}) if name == 'is_honeypot' else
+                      frozenset({'sol'}) if name in {'renounced_mint', 'renounced_freeze_account'} else None)
+            specs[(name,)] = _Spec(name, 'integer', 'risk', 'boolean_code_01', 'valid',
+                allowed_integers=frozenset({0, 1}), supported_chains=chains,
+                reason='provider_integer_flag_not_independent_security_verdict')
+        for name in ('is_wash_trading', 'creator_close'):
+            specs[(name,)] = _Spec(name, 'boolean', 'risk', quality='valid',
+                                  reason='provider_boolean_flag_not_independent_security_verdict')
     return specs
 
 
@@ -275,13 +337,15 @@ def _check(value: Any, spec: _Spec) -> tuple[str, str]:
                 return 'invalid', 'expected_integer_enum'
             if value not in spec.allowed_integers:
                 return 'invalid', 'enum_value_not_allowed'
+        if valid and spec.fraction and not Decimal(0) <= number <= Decimal(1):
+            return 'invalid', 'expected_fraction_between_zero_and_one'
         if valid and spec.positive and number <= 0:
             return 'invalid', 'expected_positive_value'
         if valid and spec.nonnegative and number < 0:
             return 'invalid', 'expected_nonnegative_value'
     if not valid:
         return 'invalid', f'expected_{spec.value_type}'
-    return spec.quality, 'contract_checked' if spec.quality == 'valid' else 'unit_scale_window_or_scope_unverified'
+    return spec.quality, spec.reason or 'provider_field_contract_checked'
 
 
 def _address(value: Any, chain: str) -> str | None:
@@ -445,7 +509,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
                 valid_identity = address is not None if key == 'address' else isinstance(item[key], str) and item[key].casefold() == chain
                 _replace_field(observations, budget, FieldObservation(pointer=pointer, category='identity', value_type=_json_type(item[key]),
                     quality='valid' if valid_identity else 'invalid', reason='identity_role_checked' if valid_identity else 'invalid_identity',
-                    contract_id=f'gmgn.{metadata.endpoint}.v2:{key}'))
+                    contract_id=f'gmgn.{metadata.endpoint}.v3:{key}'))
         for path, spec in specs.items():
             pointer = base
             for component in path:
@@ -454,8 +518,10 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
                 continue
             value = node_values[pointer]
             quality, reason = _check(value, spec)
+            if quality == 'valid' and spec.supported_chains is not None and chain not in spec.supported_chains:
+                quality, reason = 'unverified', 'field_chain_applicability_unverified'
             _replace_field(observations, budget, FieldObservation(pointer=pointer, category=spec.category, value_type=_json_type(value),
-                quality=quality, reason=reason, contract_id=f'gmgn.{metadata.endpoint}.v2:{".".join(path)}'))
+                quality=quality, reason=reason, contract_id=f'gmgn.{metadata.endpoint}.v3:{".".join(path)}'))
             if quality == 'invalid':
                 result.issues.append(_issue('invalid_field', pointer, f'Value does not satisfy the {spec.value_type} field contract: {reason}.'))
             if address is None:
@@ -467,7 +533,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
                 value_type=spec.value_type, unit=spec.unit, category=spec.category,
                 occurred_at=metadata.source_event_at if metadata.source_event_at is not None else metadata.received_at,
                 time_basis='source' if metadata.source_event_at is not None else 'received',
-                pointer=pointer, quality=quality, contract_version=f'gmgn.{metadata.endpoint}.v2')
+                pointer=pointer, quality=quality, contract_version=f'gmgn.{metadata.endpoint}.v3')
             budget.add_fact(fact)
             result.facts.append(fact)
     result.fields[:] = list(observations.values())
@@ -477,7 +543,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
 
 
 def normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationResult:
-    """Return bounded v2 output, or one explicit fatal issue without partial rows.
+    """Return bounded v3 output, or one explicit fatal issue without partial rows.
 
     Limits: 10,000 facts; 16 MiB compact UTF-8 JSON for facts+fields; 2,048 bytes
     per pointer; 256 bytes per token identity. Raw evidence is retained by the

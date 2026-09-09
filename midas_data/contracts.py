@@ -106,7 +106,9 @@ class CaptureMetadata(ContractModel):
     capture_id: UUID
     source_kind: SourceKind
     endpoint: Annotated[StrictStr, Field(min_length=1, max_length=256)]
-    chain: Annotated[StrictStr, Field(min_length=1, max_length=64)]
+    # Missing chain is retained only for raw captures without a token adapter.
+    # It never becomes a fabricated global/unknown chain or a nullable Fact.
+    chain: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None
     requested_at: datetime
     received_at: datetime
     source_event_at: datetime | None = None
@@ -126,7 +128,9 @@ class CaptureMetadata(ContractModel):
 
     @field_validator('endpoint', 'chain')
     @classmethod
-    def validate_identifier(cls, value: str) -> str:
+    def validate_identifier(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if value != value.strip() or any(ord(char) < 32 for char in value):
             raise ValueError('identifier contains surrounding whitespace or control characters')
         _assert_safe_text(value)
@@ -174,8 +178,12 @@ class CaptureMetadata(ContractModel):
 
     @model_validator(mode='after')
     def validate_clock_order(self) -> CaptureMetadata:
+        if self.chain is None and self.endpoint in {'token_info', 'market_rank'}:
+            raise ValueError('token adapters require an explicit capture chain')
         parameter_chain = self.request_params.get('chain')
-        if parameter_chain is not None and (not isinstance(parameter_chain, str) or parameter_chain.casefold() != self.chain.casefold()):
+        # Null query chain remains null/unspecified, preserving legacy metadata.
+        # Only a non-null explicit namespace must match the capture namespace.
+        if parameter_chain is not None and (self.chain is None or not isinstance(parameter_chain, str) or parameter_chain.casefold() != self.chain.casefold()):
             raise ValueError('request chain conflicts with capture chain')
         if self.requested_at > self.received_at:
             raise ValueError('requested_at must not be later than received_at')

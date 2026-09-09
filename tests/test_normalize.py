@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 
 from midas_data.contracts import CaptureMetadata
-from midas_data.normalize import normalize_capture
+from midas_data.normalize import NORMALIZER_VERSION, normalize_capture
 
 
 def metadata(**changes):
@@ -52,12 +52,13 @@ def test_unknown_fields_are_catalogued_with_json_pointers():
     assert fields['/other/a~1b~0c/2'].value_type == 'integer'
 
 
-def test_ranking_does_not_guess_market_cap_unit_or_derive_values():
+def test_ranking_uses_documented_provider_cap_without_deriving_or_guessing_supply():
     result = normalize_capture(metadata(endpoint='market_rank'), b'{"data":{"rank":[{"address":"FixtureToken","price":"0.01","market_cap":"50000","top_10_holder_rate":"50"}]}}')
     cap = fact_for(result, 'market_cap')
     assert cap.value_text == '50000'
-    assert cap.unit is None
-    assert cap.quality == 'unverified'
+    assert cap.unit == 'usd'
+    assert cap.quality == 'valid'
+    assert not any(f.metric in {'fdv', 'derived_market_cap'} for f in result.facts)
     assert fact_for(result, 'top_10_holder_rate').value_text == '50'
 
 
@@ -179,8 +180,8 @@ def test_source_and_received_clocks_are_explicit_and_creation_does_not_override_
     source = normalize_capture(source_metadata, raw)
     assert fact_for(source, 'price').occurred_at == source_metadata.source_event_at
     assert fact_for(source, 'price').time_basis == 'source'
-    assert fact_for(source, 'creation_timestamp').unit is None
-    assert fact_for(source, 'creation_timestamp').quality == 'unverified'
+    assert fact_for(source, 'creation_timestamp').unit == 'unix_second'
+    assert fact_for(source, 'creation_timestamp').quality == 'valid'
 
 
 @pytest.mark.parametrize('raw_value, expected_text, quality', [
@@ -204,8 +205,8 @@ def test_absent_key_does_not_create_a_fictitious_missing_observation():
 
 
 @pytest.mark.parametrize('raw_count, text, quality', [
-    ('9007199254740993', '9007199254740993', 'unverified'),
-    ('0', '0', 'unverified'), ('1.5', '1.5', 'invalid'),
+    ('9007199254740993', '9007199254740993', 'valid'),
+    ('0', '0', 'valid'), ('1.5', '1.5', 'invalid'),
     ('"2.0"', '2.0', 'invalid'), ('true', 'true', 'invalid'), ('-1', '-1', 'invalid'),
 ])
 def test_counts_never_pass_through_float_or_fractional_truncation(raw_count, text, quality):
@@ -229,14 +230,14 @@ def test_window_and_metric_families_remain_distinct():
     assert facts['volume_1m'].value_text == '30'
     assert facts['volume_5m'].value_text == '60'
     assert facts['buys_1m'].value_text == '7'
-    assert all(fact.quality == 'unverified' for key, fact in facts.items() if key != 'price')
+    assert all(fact.quality == 'valid' for fact in facts.values())
     assert 'market_cap' not in facts and 'history_highest_market_cap' not in facts
 
 
-@pytest.mark.parametrize('raw_bool, text, quality', [('false', 'false', 'unverified'), ('true', 'true', 'unverified'), ('1', '1', 'invalid'), ('"false"', 'false', 'invalid')])
+@pytest.mark.parametrize('raw_bool, text, quality', [('false', 'false', 'valid'), ('true', 'true', 'valid'), ('1', '1', 'invalid'), ('"false"', 'false', 'invalid')])
 def test_risk_boolean_never_uses_generic_truthiness(raw_bool, text, quality):
-    raw = ('[{"address":"FixtureToken","is_honeypot":' + raw_bool + '}]').encode()
-    fact = fact_for(normalize_capture(metadata(endpoint='market_rank'), raw), 'is_honeypot')
+    raw = ('[{"address":"FixtureToken","is_wash_trading":' + raw_bool + '}]').encode()
+    fact = fact_for(normalize_capture(metadata(endpoint='market_rank'), raw), 'is_wash_trading')
     assert fact.value_text == text and fact.quality == quality
 
 
@@ -399,14 +400,14 @@ def test_v2_supports_only_observed_double_envelope_ranking_with_original_pointer
     body = {'code': 0, 'data': {'code': 0, 'data': {'rank': items}, 'message': '', 'reason': ''}}
     result = normalize_capture(metadata(endpoint='market_rank'), json.dumps(body).encode())
     assert not result.issues
-    assert result.normalizer_version == 'gmgn-p0-v2'
+    assert result.normalizer_version == NORMALIZER_VERSION
     assert len(result.facts) == 3 * item_count
     for index in range(item_count):
         assert any(fact.pointer == f'/data/data/rank/{index}/price' for fact in result.facts)
         assert any(field.pointer == f'/data/data/rank/{index}/unknown_v2' and field.category == 'unknown' for field in result.fields)
-    assert all(fact.contract_version == 'gmgn.market_rank.v2' for fact in result.facts)
-    assert all('.v2:' in field.contract_id for field in result.fields if field.contract_id)
-    assert all(fact.quality == 'unverified' for fact in result.facts)
+    assert all(fact.contract_version == 'gmgn.market_rank.v3' for fact in result.facts)
+    assert all('.v3:' in field.contract_id for field in result.fields if field.contract_id)
+    assert all(fact.quality == ('unverified' if fact.metric == 'launchpad_status' else 'valid') for fact in result.facts)
 
 
 @pytest.mark.parametrize('inner_code', [1, -1, '0', False, None])
@@ -447,7 +448,7 @@ def test_v2_token_info_launchpad_status_uses_documented_integer_enum(status):
     fact = fact_for(result, 'launchpad_status')
     assert fact.value_type == 'integer' and fact.value_text == str(status)
     assert fact.quality == 'valid' and fact.unit is None
-    assert fact.contract_version == 'gmgn.token_info.v2'
+    assert fact.contract_version == 'gmgn.token_info.v3'
     assert not result.issues
 
 
@@ -475,3 +476,126 @@ def test_v2_fact_identity_does_not_reuse_v1_ids_for_the_same_capture():
     previous_name = json.dumps([str(metadata().capture_id), 'gmgn-p0-v1', '/price/price', 'price'], separators=(',', ':'))
     assert fact.fact_id != uuid5(namespace, previous_name)
     assert result == normalize_capture(metadata(), raw)
+
+
+@pytest.mark.parametrize('endpoint, body, unit, quality, reason', [
+    ('token_info', {'circulating_supply': '123.4500'}, 'token', 'valid', 'provider_human_token_units_no_decimal_rescaling'),
+    ('market_rank', {'circulating_supply': '123.4500'}, None, 'unverified', 'human_vs_atomic_supply_scale_unverified'),
+    ('token_info', {'liquidity': '123.4500'}, 'usd', 'valid', 'provider_main_pool_liquidity_usd'),
+    ('market_rank', {'liquidity': '123.4500'}, 'usd', 'unverified', 'ranking_liquidity_pool_vs_aggregate_scope_unverified'),
+])
+def test_v3_units_and_scope_do_not_propagate_between_endpoints(endpoint, body, unit, quality, reason):
+    metric = next(iter(body))
+    item = dict(address='FixtureToken', decimals=9, **body)
+    payload = item if endpoint == 'token_info' else [item]
+    result = normalize_capture(metadata(endpoint=endpoint), json.dumps(payload).encode())
+    fact = fact_for(result, metric)
+    assert (fact.value_text, fact.unit, fact.quality) == ('123.4500', unit, quality)
+    field = next(field for field in result.fields if field.pointer == fact.pointer)
+    assert field.reason == reason
+    assert not any(f.metric in {'fdv', 'market_cap', 'derived_market_cap'} for f in result.facts)
+
+
+@pytest.mark.parametrize('window', ['1m', '5m', '1h', '6h', '24h'])
+def test_v3_named_windows_remain_explicit_and_ranking_query_window_is_not_silently_lost(window):
+    info = normalize_capture(metadata(), json.dumps({'address': 'FixtureToken', 'price': {
+        f'price_{window}': '0.01', f'volume_{window}': '20.00', f'buys_{window}': 0}}).encode())
+    assert {f.metric for f in info.facts} == {f'window_reference_price_{window}', f'volume_{window}', f'buys_{window}'}
+    assert all(f.quality == 'valid' for f in info.facts)
+    rank = normalize_capture(metadata(endpoint='market_rank', request_params={'interval': window}),
+                             b'[{"address":"FixtureToken","volume":"20.00","buys":0,"sells":2,"swaps":2}]')
+    assert all(f.quality == 'unverified' for f in rank.facts)
+    assert {f.unit for f in rank.facts} == {'usd', 'count'}
+    assert all(field.reason == 'queried_window_not_encoded_in_fact' for field in rank.fields if field.category == 'flow')
+
+
+@pytest.mark.parametrize('name', ['creation_timestamp', 'open_timestamp'])
+@pytest.mark.parametrize('endpoint', ['token_info', 'market_rank'])
+def test_v3_epoch_seconds_are_attributes_and_zero_does_not_become_a_1970_token(endpoint, name):
+    item = {'address': 'FixtureToken', name: 0, 'migrated_timestamp': 1780000000000}
+    result = normalize_capture(metadata(endpoint=endpoint), json.dumps(item if endpoint == 'token_info' else [item]).encode())
+    assert fact_for(result, name).quality == 'invalid'
+    assert fact_for(result, name).value_text == '0'
+    assert fact_for(result, name).unit == 'unix_second'
+    assert all(f.occurred_at == metadata().received_at for f in result.facts)
+    migrated = fact_for(result, 'migrated_timestamp')
+    assert migrated.unit is None and migrated.quality == 'unverified'
+    assert migrated.value_text == '1780000000000'  # No seconds/ms guessing by magnitude.
+
+
+@pytest.mark.parametrize('name, chain, quality', [
+    ('is_honeypot', 'bsc', 'valid'), ('is_honeypot', 'base', 'valid'),
+    ('is_honeypot', 'eth', 'unverified'), ('is_honeypot', 'arc', 'unverified'),
+    ('is_open_source', 'stable', 'valid'), ('is_renounced', 'eth', 'valid'),
+    ('renounced_mint', 'sol', 'valid'), ('renounced_mint', 'base', 'unverified'),
+    ('renounced_freeze_account', 'sol', 'valid'), ('renounced_freeze_account', 'stable', 'unverified'),
+])
+@pytest.mark.parametrize('value', [0, 1])
+def test_v3_ranking_numeric_flags_preserve_encoding_and_chain_applicability(name, chain, quality, value):
+    result = normalize_capture(metadata(endpoint='market_rank', chain=chain),
+                             json.dumps([{'address': 'FixtureToken', name: value}]).encode())
+    fact = fact_for(result, name)
+    assert (fact.value_type, fact.value_text, fact.unit, fact.quality) == ('integer', str(value), 'boolean_code_01', quality)
+    if quality == 'unverified':
+        assert next(f for f in result.fields if f.pointer == fact.pointer).reason == 'field_chain_applicability_unverified'
+    assert not result.issues
+
+
+@pytest.mark.parametrize('value', [False, True, '0', '1', 0.0, 2, -1])
+def test_v3_numeric_flags_do_not_coerce_boolean_string_fraction_or_unknown_code(value):
+    result = normalize_capture(metadata(endpoint='market_rank', chain='base'),
+                             json.dumps([{'address': 'FixtureToken', 'is_honeypot': value}]).encode())
+    assert fact_for(result, 'is_honeypot').quality == 'invalid'
+
+
+@pytest.mark.parametrize('value, quality', [('0', 'valid'), ('1', 'valid'), ('0.50', 'valid'), ('50', 'invalid'), ('1.01', 'invalid'), ('-0.1', 'invalid')])
+def test_v3_documented_supply_fraction_bounds_never_rescale_percentages(value, quality):
+    result = normalize_capture(metadata(), json.dumps({'address': 'FixtureToken', 'stat': {'top_10_holder_rate': value}}).encode())
+    fact = fact_for(result, 'top_10_holder_rate')
+    assert (fact.unit, fact.value_text, fact.quality) == ('ratio', value, quality)
+
+
+def test_v3_rank_market_cap_is_provider_reported_and_never_replaced_by_price_times_supply():
+    result = normalize_capture(metadata(endpoint='market_rank'), b'[{"address":"FixtureToken","price":"3","market_cap":"2","total_supply":"100","history_highest_market_cap":"9"}]')
+    cap = fact_for(result, 'market_cap')
+    assert (cap.value_text, cap.unit, cap.quality) == ('2', 'usd', 'valid')
+    assert next(f for f in result.fields if f.pointer == cap.pointer).reason == 'provider_reported_usd_cap_supply_basis_unspecified'
+    assert fact_for(result, 'history_highest_market_cap').occurred_at == metadata().received_at
+    assert not any(f.metric == 'fdv' for f in result.facts)
+
+
+def test_v3_tax_empty_sentinel_and_percent_conflicts_are_not_silently_interpreted():
+    result = normalize_capture(metadata(endpoint='market_rank'), b'[{"address":"FixtureToken","buy_tax":"","price_change_percent1m":"50","visiting_count":7}]')
+    assert fact_for(result, 'buy_tax').quality == 'missing'
+    assert fact_for(result, 'buy_tax').value_text == ''
+    pct = fact_for(result, 'price_change_percent1m')
+    assert (pct.value_text, pct.unit, pct.quality) == ('50', None, 'unverified')
+    assert fact_for(result, 'visiting_count').category == 'attention'
+
+
+def test_v3_has_specific_reasons_for_every_unverified_path():
+    from midas_data.normalize import _specs
+    for endpoint in ('token_info', 'market_rank'):
+        for path, spec in _specs(endpoint).items():
+            if spec.quality == 'unverified':
+                assert spec.reason and spec.reason != 'unit_scale_window_or_scope_unverified', (endpoint, path)
+
+
+@pytest.mark.parametrize('previous_version', ['gmgn-p0-v1', 'gmgn-p0-v2'])
+def test_v3_preserves_previous_versions_and_uses_new_fact_ids(previous_version):
+    from uuid import NAMESPACE_URL, uuid5
+    result = normalize_capture(metadata(), b'{"address":"FixtureToken","price":{"price":"1"}}')
+    namespace = uuid5(NAMESPACE_URL, 'https://midas.local/contracts/fact/v1')
+    name = json.dumps([str(metadata().capture_id), previous_version, '/price/price', 'price'], separators=(',', ':'))
+    assert fact_for(result, 'price').fact_id != uuid5(namespace, name)
+    assert result.normalizer_version == 'gmgn-p0-v3'
+
+
+
+def test_v3_global_raw_capture_is_catalogued_before_chain_operations_and_never_promotes_tokens():
+    result = normalize_capture(metadata(endpoint='hot_searches', chain=None, request_params={}),
+                             b'{"code":0,"data":{"rank":[{"address":"FixtureToken","chain":"sol","price":"1"}]}}')
+    assert result.facts == []
+    assert [issue.code for issue in result.issues] == ['unsupported_endpoint']
+    assert any(field.pointer == '/data/rank/0/address' and field.category == 'unknown' for field in result.fields)
+    assert all(field.contract_id is None for field in result.fields)

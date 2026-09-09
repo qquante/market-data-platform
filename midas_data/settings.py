@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -14,13 +14,13 @@ def required(name: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    database_dsn: str
-    lake_catalog_dsn: str
-    api_key: str
-    nats_url: str
-    clickhouse_url: str
+    database_dsn: str = field(repr=False)
+    lake_catalog_dsn: str = field(repr=False)
+    api_key: str = field(repr=False)
+    nats_url: str = field(repr=False)
+    clickhouse_url: str = field(repr=False)
     clickhouse_user: str
-    clickhouse_password: str
+    clickhouse_password: str = field(repr=False)
     raw_path: Path
     lake_path: str
     max_capture_bytes: int = 4 * 1024 * 1024
