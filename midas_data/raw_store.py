@@ -4,9 +4,14 @@ import gzip
 import hashlib
 import os
 import re
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+
+class StoragePressure(RuntimeError):
+    pass
 
 
 class RawIntegrityError(RuntimeError):
@@ -21,10 +26,25 @@ class RawObject:
 
 
 class RawStore:
-    def __init__(self, root: Path, max_bytes: int = 4 * 1024 * 1024):
+    def __init__(self, root: Path, max_bytes: int = 4 * 1024 * 1024, *, min_free_bytes: int = 4 * 1024**3, host_capacity_path: Path | None = None):
         self.root = Path(root)
         self.max_bytes = max_bytes
+        if type(min_free_bytes) is not int or not 0 <= min_free_bytes <= 1024**4:
+            raise ValueError("invalid_storage_reserve")
+        self.min_free_bytes = min_free_bytes
+        self.host_capacity_path = Path(host_capacity_path) if host_capacity_path is not None else None
         self.root.mkdir(parents=True, exist_ok=True)
+
+    def admission(self, write_bytes: int | None = None) -> dict:
+        # Filesystem reserve, not lifetime accepted bytes or number of queued captures.
+        # This is a pressure signal, not an atomic reservation against other writers.
+        required = self.min_free_bytes + (self.max_bytes + 65536 if write_bytes is None else write_bytes)
+        raw_free = shutil.disk_usage(self.root).free
+        host_free = shutil.disk_usage(self.host_capacity_path).free if self.host_capacity_path is not None else None
+        free = min(raw_free,host_free) if host_free is not None else raw_free
+        return {"accepting": free >= required, "free_bytes": free,
+                "raw_free_bytes": raw_free, "host_free_bytes": host_free,
+                "required_free_bytes": required, "basis": "storage_filesystems_free_space"}
 
     def _path(self, digest: str) -> Path:
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -62,6 +82,9 @@ class RawStore:
             self._sync_directory(self.root)
             self._sync_directory(destination.parent)
             return obj
+        compressed = gzip.compress(raw, compresslevel=6, mtime=0)
+        if not self.admission(len(compressed))["accepting"]:
+            raise StoragePressure("storage_backpressure")
         destination.parent.mkdir(parents=True, exist_ok=True)
         if os.name != "nt":
             root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
@@ -72,7 +95,7 @@ class RawStore:
         fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=destination.parent)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(gzip.compress(raw, compresslevel=6, mtime=0))
+                stream.write(compressed)
                 stream.flush()
                 os.fsync(stream.fileno())
             try:

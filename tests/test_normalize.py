@@ -405,8 +405,8 @@ def test_v2_supports_only_observed_double_envelope_ranking_with_original_pointer
     for index in range(item_count):
         assert any(fact.pointer == f'/data/data/rank/{index}/price' for fact in result.facts)
         assert any(field.pointer == f'/data/data/rank/{index}/unknown_v2' and field.category == 'unknown' for field in result.fields)
-    assert all(fact.contract_version == 'gmgn.market_rank.v3' for fact in result.facts)
-    assert all('.v3:' in field.contract_id for field in result.fields if field.contract_id)
+    assert all(fact.contract_version == 'gmgn.market_rank.v4' for fact in result.facts)
+    assert all('.v4:' in field.contract_id for field in result.fields if field.contract_id)
     assert all(fact.quality == ('unverified' if fact.metric == 'launchpad_status' else 'valid') for fact in result.facts)
 
 
@@ -497,16 +497,17 @@ def test_v3_units_and_scope_do_not_propagate_between_endpoints(endpoint, body, u
 
 
 @pytest.mark.parametrize('window', ['1m', '5m', '1h', '6h', '24h'])
-def test_v3_named_windows_remain_explicit_and_ranking_query_window_is_not_silently_lost(window):
+def test_v4_named_windows_remain_explicit_in_both_endpoints(window):
     info = normalize_capture(metadata(), json.dumps({'address': 'FixtureToken', 'price': {
         f'price_{window}': '0.01', f'volume_{window}': '20.00', f'buys_{window}': 0}}).encode())
     assert {f.metric for f in info.facts} == {f'window_reference_price_{window}', f'volume_{window}', f'buys_{window}'}
     assert all(f.quality == 'valid' for f in info.facts)
     rank = normalize_capture(metadata(endpoint='market_rank', request_params={'interval': window}),
                              b'[{"address":"FixtureToken","volume":"20.00","buys":0,"sells":2,"swaps":2}]')
-    assert all(f.quality == 'unverified' for f in rank.facts)
+    assert all(f.quality == 'valid' for f in rank.facts)
+    assert {f.metric for f in rank.facts} == {f'{name}_{window}' for name in ('volume', 'buys', 'sells', 'swaps')}
     assert {f.unit for f in rank.facts} == {'usd', 'count'}
-    assert all(field.reason == 'queried_window_not_encoded_in_fact' for field in rank.fields if field.category == 'flow')
+    assert all(field.reason == 'provider_requested_window_end_not_measured' for field in rank.fields if field.category == 'flow')
 
 
 @pytest.mark.parametrize('name', ['creation_timestamp', 'open_timestamp'])
@@ -581,14 +582,14 @@ def test_v3_has_specific_reasons_for_every_unverified_path():
                 assert spec.reason and spec.reason != 'unit_scale_window_or_scope_unverified', (endpoint, path)
 
 
-@pytest.mark.parametrize('previous_version', ['gmgn-p0-v1', 'gmgn-p0-v2'])
+@pytest.mark.parametrize('previous_version', ['gmgn-p0-v1', 'gmgn-p0-v2', 'gmgn-p0-v3'])
 def test_v3_preserves_previous_versions_and_uses_new_fact_ids(previous_version):
     from uuid import NAMESPACE_URL, uuid5
     result = normalize_capture(metadata(), b'{"address":"FixtureToken","price":{"price":"1"}}')
     namespace = uuid5(NAMESPACE_URL, 'https://midas.local/contracts/fact/v1')
     name = json.dumps([str(metadata().capture_id), previous_version, '/price/price', 'price'], separators=(',', ':'))
     assert fact_for(result, 'price').fact_id != uuid5(namespace, name)
-    assert result.normalizer_version == 'gmgn-p0-v3'
+    assert result.normalizer_version == NORMALIZER_VERSION
 
 
 

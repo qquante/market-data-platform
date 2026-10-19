@@ -1,0 +1,150 @@
+{
+  "status": "approved_shadow",
+  "broadcast_enabled": false,
+  "source_serialization_sha256": "0fb260ba2f821cdfea38ad68bdc72164e96105f422dba99b7fe7adf0ab12ccee",
+  "strategy_sha256": "0e340c81599aa0d7f31cf783d5989e27e48f958cc74373be649b6a25288a345e",
+  "strategy": {
+    "run_id": "b0f80119-324a-4df7-99aa-7f9eb5193cc3",
+    "pair_id": "cdbe2fe3683c0034ee14",
+    "entry_rule_id": "b0578c0d26089df7b6e1",
+    "chain_scope": "robinhood",
+    "horizon_seconds": 21600,
+    "target_age_seconds": 0,
+    "entry_rule": {
+      "label": null,
+      "conditions": [
+        {
+          "key": "bundler_rate",
+          "std": 0.19715154273635319,
+          "mean": 0.08288421052631578,
+          "label": "Bundlers",
+          "family": "risco",
+          "weight": 0.5,
+          "direction": -1,
+          "transform": "identity"
+        },
+        {
+          "key": "buy_ratio",
+          "std": 0.014607086944515941,
+          "mean": 0.9937935748462065,
+          "label": "Compras / trades",
+          "family": "fluxo",
+          "weight": 1.25,
+          "direction": 1,
+          "transform": "identity"
+        },
+        {
+          "key": "holder_count",
+          "std": 0.5890884032078737,
+          "mean": 2.8525140083168705,
+          "label": "Holders",
+          "family": "holders",
+          "weight": 2,
+          "direction": 1,
+          "transform": "log"
+        },
+        {
+          "key": "insider_rate",
+          "std": 0.055153770436406256,
+          "mean": 0.013705263157894738,
+          "label": "Insiders",
+          "family": "risco",
+          "weight": 0.5,
+          "direction": -1,
+          "transform": "identity"
+        },
+        {
+          "key": "liquidity",
+          "std": 0.5872096633815159,
+          "mean": 8.791561200877354,
+          "label": "Liquidez",
+          "family": "liquidez",
+          "weight": 0.75,
+          "direction": 1,
+          "transform": "log"
+        },
+        {
+          "key": "market_cap",
+          "std": 0.709011328517806,
+          "mean": 9.372265766166638,
+          "label": "Market cap",
+          "family": "preco",
+          "weight": 1.5,
+          "direction": -1,
+          "transform": "log"
+        },
+        {
+          "key": "smart_count",
+          "std": 0.2178351429930105,
+          "mean": 0.07701635339554948,
+          "label": "Smart money",
+          "family": "carteiras",
+          "weight": 1,
+          "direction": 1,
+          "transform": "log"
+        },
+        {
+          "key": "visiting_count",
+          "std": 0.15877327997487392,
+          "mean": 0.03850817669777474,
+          "label": "Visitas",
+          "family": "social",
+          "weight": 1,
+          "direction": 1,
+          "transform": "log"
+        }
+      ],
+      "chain_scope": "robinhood",
+      "score_cutoff": 0.15469285070471994,
+      "entry_rule_id": "b0578c0d26089df7b6e1",
+      "evidence_tier": "provisional_small_sample",
+      "feature_count": 8,
+      "group_holdout": "chronological_only",
+      "matched_count": 6,
+      "normalization": "train_only_zscore_clipped_4",
+      "eligible_count": 28,
+      "missing_policy": "fail_closed",
+      "required_gates": [],
+      "selection_rate": 0.21428571428571427,
+      "strategy_family": "gmgn",
+      "event_validation": {
+        "largest_event_group_share": 1,
+        "largest_event_profit_share": 1,
+        "test_independent_event_groups": 1,
+        "exact_x_post_train_test_overlap": null
+      },
+      "selection_quantile": 0.75,
+      "minimum_selected_test": 1,
+      "minimum_selected_train": 3,
+      "train_last_observed_at_utc": "2026-09-07T12:40:50.093904+00:00",
+      "train_last_decision_point_id": 64150953
+    },
+    "exit_policy": {
+      "time_exit": "first_observable_price_at_or_after_horizon",
+      "sell_percent": [
+        70,
+        10,
+        10,
+        10
+      ],
+      "moonbag_percent": 0,
+      "stop_loss_percent": -40,
+      "targets_gain_percent": [
+        100,
+        500,
+        900,
+        1200
+      ],
+      "minimum_partial_percent": 10,
+      "capital_recovered_percent": 130.2703
+    },
+    "robust_gate": false,
+    "net_train_mean": 2.502354341258337,
+    "net_test_mean": 0.47019305019305,
+    "stress_test_mean": 0.4295238095238092,
+    "policy_version": "gmgn-feature-exit-lab-v9",
+    "completed_at_utc": "2026-09-07 22:49:50.990622+00:00"
+  },
+  "auto_promote_live": false,
+  "activated_at_utc": "2026-09-08T00:45:00+00:00"
+}

@@ -1,0 +1,17 @@
+{
+  "selected_partials": {
+    "path": "docs/gmgn_api/reports/ESTRATEGIAS_PARCIAIS_SELECIONADAS_ROBINHOOD_2026-09-07_1904.json",
+    "label": "Parciais selecionadas · 07/09 22:04 UTC",
+    "sha256": "7c2df092ad89f4842586bb413e3dc48ca3c76446e376e997ef06d7927f1b0259"
+  },
+  "fast_partials": {
+    "path": "docs/gmgn_api/reports/PARCIAIS_RAPIDAS_CANDIDATAS_2026-09-07.json",
+    "label": "Parciais rápidas · 07/09 23:13 UTC",
+    "sha256": "4710bd05fecf934fb57fbfe3b293bc351df819182d1c0ee97c557979e84a8ff9"
+  },
+  "partial70_shadow": {
+    "path": "docs/gmgn_api/profiles/robinhood-partial70.shadow-v1.json",
+    "label": "Parcial 70% · calibração shadow de 08/09",
+    "sha256": "52cac8236e46d0c5b1136cfed9606bd73ac65f5544291a8733fba365fa583ac6"
+  }
+}

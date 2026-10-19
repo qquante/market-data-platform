@@ -1,0 +1,68 @@
+{
+  "contract_id": "gmgn.token_top_holders.http.v2",
+  "semantic_contract": "gmgn.token_top_holders.v1",
+  "parser_version": "gmgn-holders-v2",
+  "status": "implemented_and_tested_not_deployed",
+  "checkpoint": "CP-RESEARCH-UI-01",
+  "chain": "sol",
+  "endpoint": "token_top_holders",
+  "route": "GET /v1/market/token_top_holders",
+  "response_formats": [
+    {
+      "evidence_kind": "original_response",
+      "success": "strict integer code=0; unambiguous data object",
+      "rows_pointer": "/data/list"
+    },
+    {
+      "evidence_kind": "legacy_reserialized",
+      "rows_pointer": "/list",
+      "clock_limitation": "CLI clocks do not establish original HTTP request/receive clocks"
+    }
+  ],
+  "field_semantics": "gmgn-holders-v1.json#row_contract",
+  "runtime": {
+    "worker_adapter_implemented": true,
+    "persistence_implemented": true,
+    "collector_opt_in_implemented": true,
+    "live_enabled": false
+  },
+  "max_rows": 100,
+  "original_http_verified": {
+    "http_status": 200,
+    "received_at": "2026-09-11T03:01:25.704481+00:00",
+    "bytes": 23426,
+    "rows": 10,
+    "catalog_fields": 902,
+    "issues": 0,
+    "raw_sha256": "ae8946b245115999a3532d58a84c9d313e0a7759acf7078598a82033682f1bb4",
+    "ingested_live": false
+  },
+  "collection": {
+    "enabled_by_default": false,
+    "env": "DATA_RESEARCH_ENDPOINTS=token_top_holders",
+    "interval_seconds": 60,
+    "documented_weight": 5,
+    "shared_quota": true,
+    "query": {
+      "limit": 100,
+      "order_by": "amount_percentage",
+      "direction": "desc"
+    },
+    "scope": "active registered tokens with previous accepted token_info"
+  },
+  "storage": {
+    "migration": "016",
+    "transaction": "catalog + holder observations + availability + capture state + outbox",
+    "facts_emitted": 0,
+    "projection": "PostgreSQL",
+    "analytics_limit": "zero-Fact receipts do not project holders into ClickHouse or DuckLake"
+  },
+  "limits": {
+    "raw_bytes": 8388608,
+    "json_nodes": 20000,
+    "parser_output_bytes": 16777216,
+    "snapshot_http_bytes": 2097152
+  },
+  "population": "partial ordered list; no total holder count, exhaustive coverage or provider denominator certification",
+  "source": "https://github.com/GMGNAI/gmgn-skills/blob/ec95135ecabfdf617c0690a28af64e84d22d5210/src/client/OpenApiClient.ts"
+}

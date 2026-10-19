@@ -168,7 +168,7 @@ O limite de 50 metadados não implica 50 corpos lidos: accepted iguais usam ledg
 
 Audit repetido custa O(chamadas desde origin) em metadados por ciclo. O custo cresce com a idade da ponte. A fronteira fixa permite concluir cada ciclo; não fornece por si só SLA de revisita. Aumentar concorrência sem medir pode disputar I/O e pool com o coletor.
 
-O guard de admissão implementado roda antes de ler outra página (`bridge.py:169–185`, `:311–324`):
+O guard inicial abaixo é histórico e foi substituído em DB-09.1 pela admissão por espaço livre real; operação e testes atuais em [ADMISSION.md](ADMISSION.md). Ele rodava antes de outra página:
 
 - **Queue 500:** soma dois probes limitados a 500 linhas cada — outbox não consumido e normalization_runs disponíveis ainda não aplicados aos destinos. A soma pode chegar a 1.000 e pausa quando >=500. Não é um COUNT completo, nem necessariamente 500 chamadas distintas ou 500 batches; não converter esse número em segundos de entrada.
 - **Raw 32 GiB:** orçamento padrão de accepted_raw_bytes desta ponte/origem, com **reserva de 200 MiB por página** (50 × 4 MiB). Pausa quando bytes já contabilizados + reserva excederem o orçamento; mínimo de configuração é 200 MiB.
@@ -212,7 +212,7 @@ Não foi localizada rotina de DELETE/TRUNCATE das duas tabelas nos caminhos exam
 2. Ordenação: teste controlado com commit atrasado além do recent, inserção atrás de cursor de página e retomada de audit; exercitar pela Interface, em origem de teste.
 3. Durabilidade: queda após ACK e antes de checkpoint, HTTP incerto e fonte temporariamente indisponível; nenhum salto silencioso ou segunda captura.
 4. Cobertura: success+error com ledger distinto de unavailable/rejected; bruto sem chain aceito apenas sem adapter; oversize/hash inválido/unsupported explícitos. HTTP 409/ACK incerto mantêm página pendente, sem rejeição permanente ou cadeia/corpo fabricados.
-5. Custo: queries limitadas, um blob por vez, alternância de lanes enquanto páginas concluem, pausa/retomada sob queue 500 e orçamento raw 32 GiB com reserva 200 MiB; distinguir limites de vazão efetivamente observada.
+5. Custo: queries limitadas, um blob por vez, alternância de lanes enquanto páginas concluem e pausa/retomada por pressão física de armazenamento conforme ADMISSION.md. Os antigos guards de fila/bytes cumulativos foram substituídos. Distinguir proteção de vazão efetivamente observada.
 6. Proveniência: valores/bytes/clocks preservados, metadados compatíveis com os imports existentes e estado separado entre bruto aceito, interpretação e recibo de ambos os destinos.
 
 Esta revisão confirmou o comportamento acima por leitura do código e corrigiu o plano; não executou a ponte, testes ou migração histórica. O status operacional e os PASS de integração devem ser lidos nos registros atualizados do coordenador e em BRIDGE_ACCEPTANCE.md, sem transformar constatação static-only em prova de execução. FIELD_CONTRACTS.md permaneceu intacto.

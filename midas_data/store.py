@@ -11,7 +11,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .raw_store import RawStore
+from .raw_store import RawStore, StoragePressure
 
 
 def utcnow() -> datetime:
@@ -23,6 +23,10 @@ def canonical(value: Any) -> str:
 
 
 class CaptureConflict(ValueError):
+    pass
+
+
+class ValuationInputLimit(ValueError):
     pass
 
 
@@ -72,6 +76,10 @@ class Store:
         existing = await self.pool.fetchrow("SELECT fingerprint FROM captures WHERE capture_id=$1", metadata.capture_id)
         if existing and existing["fingerprint"] != fingerprint:
             raise CaptureConflict("capture_id already identifies another capture")
+        # New manifests consume storage even when their raw object is deduplicated.
+        # An exact replay can still reconcile an ACK without adding another object.
+        if not existing and not (await asyncio.to_thread(self.raw.admission))["accepting"]:
+            raise StoragePressure("storage_backpressure")
         obj = await asyncio.to_thread(self.raw.write, raw)
         async with self.pool.acquire() as con:
             async with con.transaction():
@@ -166,6 +174,10 @@ class Store:
                 raise ValueError("normalization_group_output_size_limit")
             if total_facts > 10_000:
                 raise ValueError("normalization_group_fact_count_limit")
+            if len(payload['fields']) > 40_000:
+                raise ValueError('normalization_field_count_limit')
+            if len({f['pointer'] for f in payload['fields']}) != len(payload['fields']):
+                raise ValueError('normalization_duplicate_field_pointer')
             version = result.normalizer_version
             prepared.append({"capture_id": capture_id, "version": version,
                 "batch_id": hashlib.sha256((str(capture_id) + ":" + version).encode()).hexdigest(),
@@ -218,8 +230,10 @@ class Store:
                             fact["value_type"], fact["unit"], fact["category"],
                             datetime.fromisoformat(fact["occurred_at"].replace("Z", "+00:00")), fact["time_basis"],
                             fact["pointer"], fact["quality"], fact["contract_version"]))
-                    field_records.extend((capture_id, version, f["pointer"], f["category"], f["value_type"],
-                        f["quality"], f["reason"], f.get("contract_id")) for f in p["fields"])
+                    # Preserve the entire ordered catalogue, including reasons and nulls.
+                    # One packet per run avoids repeating capture/version and indexes
+                    # for each field; PostgreSQL TOAST compresses it transparently.
+                    field_records.append((capture_id, version, canonical(p['fields'])))
                     rejected = any(i["code"] in FATAL_ISSUE_CODES | UNSUPPORTED_ISSUE_CODES for i in p["issues"])
                     state_ids.append(capture_id)
                     states.append("quarantined" if rejected else "ready")
@@ -229,8 +243,8 @@ class Store:
                         "chain", "token_address", "metric", "value_text", "numeric_value", "value_type",
                         "unit", "category", "occurred_at", "time_basis", "pointer", "quality", "contract_version"))
                 if field_records:
-                    await con.copy_records_to_table("field_observations", records=field_records, columns=(
-                        "capture_id", "normalizer_version", "pointer", "category", "value_type", "quality", "reason", "contract_id"))
+                    await con.copy_records_to_table("field_catalog_batches", records=field_records, columns=(
+                        "capture_id", "normalizer_version", "fields"))
                 if state_ids:
                     await con.execute("""UPDATE captures c SET normalization_state=input.state,last_error=NULL
                         FROM unnest($1::uuid[],$2::text[]) AS input(capture_id,state)
@@ -259,6 +273,31 @@ class Store:
                                   capture_ids, marker)
         return [{"batch_id":p["batch_id"], "fact_count":len(p["facts"]),
                  "field_count":len(p["fields"]), "issues":p["issues"]} for p in prepared]
+
+    async def catalog(self, source_kind, limit, capture_limit, capture_id=None):
+        return await self.pool.fetch(
+            """WITH recent AS MATERIALIZED (SELECT capture_id,endpoint FROM captures WHERE source_kind=$1
+            AND ($4::uuid IS NULL OR capture_id=$4)
+            ORDER BY recorded_at DESC,capture_id DESC LIMIT $3)
+            SELECT c.endpoint,f.pointer,f.category,f.value_type,f.quality,f.contract_id,
+            count(*) AS observations FROM recent c
+            JOIN LATERAL (SELECT normalizer_version FROM normalization_runs
+              WHERE capture_id=c.capture_id AND available_at IS NOT NULL
+              ORDER BY available_at DESC,normalizer_version DESC LIMIT 1) selected_run ON true
+            JOIN LATERAL (
+              SELECT item.* FROM field_catalog_batches b
+              CROSS JOIN LATERAL jsonb_to_recordset(b.fields) AS item(
+                pointer text,category text,value_type text,quality text,contract_id text)
+              WHERE b.capture_id=c.capture_id AND b.normalizer_version=selected_run.normalizer_version
+              UNION ALL
+              SELECT old.pointer,old.category,old.value_type,old.quality,old.contract_id
+              FROM field_observations old
+              WHERE old.capture_id=c.capture_id AND old.normalizer_version=selected_run.normalizer_version
+              AND NOT EXISTS (SELECT 1 FROM field_catalog_batches b
+                WHERE b.capture_id=old.capture_id AND b.normalizer_version=old.normalizer_version)
+            ) f ON true
+            GROUP BY 1,2,3,4,5,6 ORDER BY 1,2 LIMIT $2""",
+            source_kind,limit,capture_limit,capture_id)
 
     async def batch_rows(self, batch_id: str) -> list[dict]:
         rows = await self.pool.fetch(
@@ -384,7 +423,30 @@ class Store:
             FROM bridge_state WHERE source_name NOT LIKE 'fixture:%' ORDER BY source_name LIMIT 50""")
         return {"captures":[dict(r) for r in counts],"outbox":dict(queue),
                 "analytics_pending":analytics_pending,"analytics_failures":analytics_failures,"workers":[dict(r) for r in health],
-                "bridges":[dict(r) for r in bridges]}
+                "bridges":[dict(r) for r in bridges], "pipeline":await self.pipeline_status()}
+
+    async def pipeline_status(self) -> dict:
+        pending=await self.pool.fetch("""SELECT destination,count(*) AS pending,
+            count(*) FILTER(WHERE last_error IS NOT NULL) AS errors,
+            extract(epoch FROM clock_timestamp()-min(created_at)) AS oldest_seconds
+            FROM analytics_deliveries WHERE applied_at IS NULL GROUP BY destination""")
+        normal=await self.pool.fetchrow("""SELECT count(*) AS pending,
+            extract(epoch FROM clock_timestamp()-min(c.recorded_at)) AS oldest_seconds
+            FROM outbox o JOIN captures c USING(capture_id) WHERE o.consumed_at IS NULL""")
+        health=await self.pool.fetch("""SELECT worker_name,state,details,
+            extract(epoch FROM clock_timestamp()-heartbeat_at) AS heartbeat_age_seconds
+            FROM worker_health WHERE worker_name IN ('data-relay','data-normalizer','data-lake','data-clickhouse','data-maintenance')""")
+        capacity=await asyncio.to_thread(self.raw.admission)
+        stages={r["worker_name"].removeprefix("data-"):dict(r,details=json.loads(r["details"])) for r in health}
+        queues={r["destination"]:dict(r) for r in pending}
+        queues["normalizer"]=dict(normal)
+        for name in ("lake","clickhouse"):queues.setdefault(name,{"pending":0,"errors":0,"oldest_seconds":None})
+        fresh=len(stages)==5 and all(r["heartbeat_age_seconds"]<45 for r in stages.values())
+        ready=fresh and all(r["state"]=="ready" for r in stages.values()) and not any(q.get("errors",0) for q in queues.values())
+        updated=ready and all((q.get("oldest_seconds") or 0)<=120 for q in queues.values())
+        return {"accepting":capacity["accepting"],"worker_live":fresh,"processing_ready":ready,
+            "processing_current":updated,"queues":queues,"stages":stages,"storage":capacity,
+            "age_basis":"durable capture acceptance and normalization publication; source lag is in bridges"}
 
     async def ingestion_status(self, limit: int = 50) -> dict:
         if not 1 <= limit <= 100:
@@ -434,6 +496,33 @@ class Store:
                  AND (newer.available_at,newer.normalizer_version) > (facts.available_at,facts.normalizer_version))
                ORDER BY seq LIMIT $10""",
             chain,token,metric,start,end,cutoff,source_kind,after_seq,include_unverified,limit)
+        return [self._public_fact(dict(r)) for r in rows]
+
+    async def observation_context_record(self, fact_id: UUID, source_kind: str, cutoff: datetime):
+        rows = await self._temporal_fetch(cutoff,
+            """SELECT f.*, c.endpoint, c.raw_sha256, c.metadata,
+                      c.recorded_at AS capture_recorded_at
+               FROM facts f JOIN captures c ON c.capture_id=f.capture_id
+               WHERE f.fact_id=$1 AND f.source_kind=$2 AND f.available_at<=$3""",
+            fact_id, source_kind, cutoff)
+        if not rows:
+            return None
+        row = dict(rows[0])
+        capture = {k: row.pop(k) for k in ('endpoint', 'raw_sha256', 'metadata', 'capture_recorded_at')}
+        capture['metadata'] = json.loads(capture['metadata'])
+        return self._public_fact(row), capture
+
+    async def valuation_facts(self, fact_id, source_kind, cutoff, pointers):
+        rows = await self._temporal_fetch(cutoff,
+            """SELECT f.* FROM facts anchor JOIN facts f
+               ON f.capture_id=anchor.capture_id AND f.normalizer_version=anchor.normalizer_version
+               AND f.chain=anchor.chain AND f.token_address=anchor.token_address
+               AND f.source_kind=anchor.source_kind
+               WHERE anchor.fact_id=$1 AND anchor.source_kind=$2 AND anchor.available_at<=$3
+                 AND f.available_at<=$3 AND f.pointer=ANY($4::text[])
+               ORDER BY f.pointer LIMIT 13""", fact_id,source_kind,cutoff,pointers)
+        if len(rows)>12:
+            raise ValuationInputLimit('valuation_input_budget_exceeded')
         return [self._public_fact(dict(r)) for r in rows]
 
     async def _temporal_fetch(self, cutoff, sql, *args):

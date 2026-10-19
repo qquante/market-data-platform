@@ -5,23 +5,31 @@ import json
 import logging
 import signal
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 import nats
+import asyncpg
 from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy, RetentionPolicy, StorageType, StreamConfig, DiscardPolicy
 from nats.js.errors import NotFoundError
 
-from .analytics import AnalyticsSinks, BatchConflict, batch_size, MAX_BATCH_ROWS, MAX_BATCH_BYTES
+from .analytics import BatchConflict, batch_size, MAX_BATCH_ROWS, MAX_BATCH_BYTES, MAX_GROUP_ROWS, MAX_DELIVERY_CAPTURES
+from .analytics_process import ProcessAnalyticsSinks
 from .contracts import CaptureMetadata
 from .normalize import normalize_capture, NORMALIZER_VERSION
 from .raw_store import RawStore
-from .settings import Settings
+from .settings import Settings, bounded_int
 from .store import Store, utcnow
+from .token_registry import TokenRegistry
+from .holders import parse_holders, PARSER_VERSION as HOLDER_PARSER_VERSION
+from .holder_store import HolderStore
+from .research_jobs import ResearchJobs
+from .resources import resource_snapshot
 
 log=logging.getLogger("midas-data")
 MAX_GROUP_CAPTURES=8
+NACK_DIAGNOSTIC_TIMEOUT_SECONDS=2.0
 
 
 async def ensure_stream(js):
@@ -38,308 +46,434 @@ async def ensure_stream(js):
         await js.add_stream(config=expected)
 
 
-def group_would_overflow(count, rows, size, next_rows, next_size):
+def group_would_overflow(count, rows, size, next_rows, next_size, *, row_limit=MAX_BATCH_ROWS, capture_limit=MAX_GROUP_CAPTURES):
     # A single oversized item must reach the component's validator, not loop
     # indefinitely as an empty group. The normalizer already bounds its output.
-    return bool(count and (count >= MAX_GROUP_CAPTURES or
-                           rows+next_rows > MAX_BATCH_ROWS or size+next_size > MAX_BATCH_BYTES))
+    return bool(count and (count >= capture_limit or
+                           rows+next_rows > row_limit or size+next_size > MAX_BATCH_BYTES))
+
+
+def destination_retry_delay(target, error, consecutive):
+    diagnostic=getattr(error,'diagnostic',{})
+    if target!='lake' or diagnostic.get('stage')!='lake.query':return 0
+    if diagnostic.get('causeType') not in {'InterruptException','InterruptedException','OutOfMemoryException','IOException'}:return 0
+    return min(3600,600*2**min(max(0,int(consecutive)-1),3))
+
+
+def destination_retry_state(saved,now):
+    try:
+        if isinstance(saved,str):saved=json.loads(saved)
+        if not isinstance(saved,dict) or not isinstance(saved.get('retry_at'),str):return {}
+        deadline=datetime.fromisoformat(saved['retry_at'])
+        if deadline.tzinfo is None:return {}
+        remaining=(deadline-now).total_seconds()
+        if not 0<remaining<=3600:return {}
+        consecutive=saved.get('consecutive_destination_failures',1)
+        consecutive=max(1,min(100,consecutive)) if type(consecutive) is int else 1
+        restored=dict(state='degraded',reason='destination_cooldown',retry_at=saved['retry_at'],
+            retry_after_seconds=int(remaining),consecutive_destination_failures=consecutive)
+        previous=saved.get('last_error')
+        if isinstance(previous,dict) and previous.get('stage')=='lake.query':
+            restored['last_error']={'type':'AnalyticsError','stage':'lake.query'}
+            if previous.get('operation') in {'identity_check','read_batches','receipts','snapshots','insert','commit','rollback','begin','schema','maintenance','query'}:
+                restored['last_error']['operation']=previous['operation']
+            if previous.get('causeType') in {'InterruptException','InterruptedException','OutOfMemoryException','IOException'}:
+                restored['last_error']['causeType']=previous['causeType']
+        return restored
+    except (ValueError,TypeError,OverflowError):return {}
+
+
+class Pipeline:
+    """Independent bounded loops sharing only durable state and ownership."""
+    def __init__(self, settings, store, stop):
+        from .delivery import DeliveryStore
+        self.settings,self.store,self.stop=settings,store,stop
+        self.republish_seconds=bounded_int('DATA_OUTBOX_REPUBLISH_SECONDS',15,15,3600)
+        self.deliveries=DeliveryStore(store)
+        self.registry=TokenRegistry(store)
+        self.research=ResearchJobs(store)
+        self.connection=self.js=self.consumer=None
+        self.broker_lock=asyncio.Lock()
+        self.sinks={target:ProcessAnalyticsSinks(settings.lake_catalog_dsn,settings.lake_path,
+            settings.clickhouse_url,settings.clickhouse_user,settings.clickhouse_password,
+            destination=target) for target in ("lake","clickhouse")}
+        self.stages={name:{"state":"starting","completed":0,"failures":0,"fallbacks":0}
+                     for name in ("relay","normalizer","lake","clickhouse","maintenance","registry","research")}
+        self.lake_batches=0
+
+    async def broker(self):
+        async with self.broker_lock:
+            if self.connection is None or self.connection.is_closed:
+                self.connection=await nats.connect(self.settings.nats_url,connect_timeout=5,
+                    max_reconnect_attempts=-1)
+                self.js=self.connection.jetstream(timeout=10)
+                self.consumer=None
+            # A successful transport connection is not yet a ready consumer.
+            if self.consumer is None:
+                await ensure_stream(self.js)
+                self.consumer=await self.js.pull_subscribe(
+                    "midas.data.capture",durable="normalizer-v1",stream="MIDAS_DATA",
+                    config=ConsumerConfig(durable_name="normalizer-v1",ack_policy=AckPolicy.EXPLICIT,
+                        deliver_policy=DeliverPolicy.ALL,ack_wait=120,max_ack_pending=32,max_deliver=-1))
+        return self.js,self.consumer
+
+    async def _published_message_present(self, js, capture_id, sequence):
+        try:
+            message = await js.get_msg("MIDAS_DATA", seq=sequence)
+        except NotFoundError:
+            return False
+        if message.subject != "midas.data.capture" or int(message.seq) != sequence:
+            raise RuntimeError("Outbox publication identity mismatch")
+        try:
+            payload = json.loads(message.data)
+        except (ValueError, TypeError):
+            raise RuntimeError("Outbox publication payload mismatch") from None
+        if not isinstance(payload, dict) or payload.get("capture_id") != capture_id:
+            raise RuntimeError("Outbox publication payload mismatch")
+        return True
+
+    async def _publish_capture(self, js, capture_id, missing_sequence=None):
+        # An expired/deleted sequence needs a fresh, deterministic message ID.
+        # Uncertain acknowledgements retry that same ID, including after restart.
+        message_id = capture_id if missing_sequence is None else f"{capture_id}:recovery:{missing_sequence}"
+        for _ in range(2):
+            ack = await js.publish("midas.data.capture", json.dumps({"capture_id": capture_id}).encode(),
+                headers={"Nats-Msg-Id": message_id})
+            if ack.stream != "MIDAS_DATA" or not isinstance(ack.seq, int) or isinstance(ack.seq, bool) or ack.seq <= 0:
+                raise RuntimeError("Invalid outbox publication acknowledgement")
+            if not ack.duplicate or await self._published_message_present(js, capture_id, ack.seq):
+                return ack
+            # A duplicate PubAck can refer to a deleted message still remembered
+            # by the deduplication cache. Reconcile it instead of accepting loss.
+            message_id = f"{capture_id}:recovery:{ack.seq}"
+        raise RuntimeError("Outbox publication disappeared during reconciliation")
+
+    async def relay(self):
+        js, _ = await self.broker()
+        self.stages['relay']['operation'] = 'publication_reconcile'
+        # Published capture IDs are checked by their durable stream sequence.
+        # Confirmed messages are never republished simply because time elapsed.
+        pending = await self.store.pool.fetch("""WITH selected AS MATERIALIZED (
+                SELECT capture_id,published_at FROM outbox
+                WHERE consumed_at IS NULL AND (published_at IS NULL OR published_at<$1)
+                ORDER BY published_at NULLS FIRST,capture_id LIMIT 16
+            )
+            SELECT o.capture_id,p.stream,p.sequence FROM selected o
+            LEFT JOIN outbox_publications p USING(capture_id)
+            ORDER BY o.published_at NULLS FIRST,o.capture_id""",
+            utcnow()-timedelta(seconds=self.republish_seconds))
+        for row in pending:
+            cid = str(row["capture_id"])
+            sequence = row["sequence"]
+            if sequence is not None:
+                if row["stream"] != "MIDAS_DATA":
+                    raise RuntimeError("Outbox publication stream mismatch")
+                self.stages['relay']['verification_checks'] = self.stages['relay'].get('verification_checks', 0)+1
+                if await self._published_message_present(js, cid, sequence):
+                    async with self.store.pool.acquire() as con:
+                        async with con.transaction():
+                            await con.execute("""UPDATE outbox_publications SET checked_at=clock_timestamp()
+                                WHERE capture_id=$1 AND sequence=$2""", row["capture_id"], sequence)
+                            # Keep the existing indexed outbox timestamp as the
+                            # eligibility cursor. The receipt retains actual publish time.
+                            await con.execute("""UPDATE outbox SET published_at=clock_timestamp()
+                                WHERE capture_id=$1""", row["capture_id"])
+                    continue
+            self.stages['relay']['operation'] = 'publish'
+            ack = await self._publish_capture(js, cid, sequence)
+            # Persist PubAck before treating a publication as confirmed. A crash
+            # before this transaction safely retries the same deterministic ID.
+            async with self.store.pool.acquire() as con:
+                async with con.transaction():
+                    await con.execute("""INSERT INTO outbox_publications(capture_id,stream,sequence)
+                        VALUES($1,$2,$3) ON CONFLICT(capture_id) DO UPDATE SET stream=excluded.stream,
+                        sequence=excluded.sequence,published_at=clock_timestamp(),checked_at=clock_timestamp()""",
+                        row["capture_id"], ack.stream, ack.seq)
+                    await con.execute("""UPDATE outbox SET published_at=clock_timestamp(),
+                        publish_count=publish_count+1,last_error=NULL WHERE capture_id=$1""", row["capture_id"])
+            status = self.stages['relay']
+            status['publish_confirmed'] = status.get('publish_confirmed', 0)+1
+            status['duplicate_acks'] = status.get('duplicate_acks', 0)+int(bool(ack.duplicate))
+            status['recovered'] = status.get('recovered', 0)+int(sequence is not None)
+            status['last_puback'] = {'stream': ack.stream, 'sequence': ack.seq, 'duplicate': bool(ack.duplicate)}
+        return len(pending)
+
+    async def nack(self, entries, exc):
+        # Recovery is independent of diagnostic writes to a pressured database.
+        # Cancellation still propagates; durable broker/outbox state survives it.
+        for entry in entries:
+            for message in entry["messages"]:
+                try: await message.nak(delay=5)
+                except asyncio.CancelledError: raise
+                except Exception: pass
+        capture_ids=list(dict.fromkeys(entry.get("capture_id") for entry in entries
+                                      if entry.get("capture_id") is not None))
+        if not capture_ids: return
+        try:
+            # One total budget covers pool admission and both batched markers.
+            async with asyncio.timeout(NACK_DIAGNOSTIC_TIMEOUT_SECONDS):
+                code=type(exc).__name__
+                await self.store.pool.execute(
+                    "UPDATE captures SET last_error=$2 WHERE capture_id=ANY($1::uuid[])",capture_ids,code)
+                await self.store.pool.execute(
+                    "UPDATE outbox SET last_error=$2 WHERE capture_id=ANY($1::uuid[])",capture_ids,code)
+        except asyncio.CancelledError: raise
+        except Exception as diagnostic:
+            log.warning("nack_marker_failed type=%s captures=%d",type(diagnostic).__name__,len(capture_ids))
+
+    async def ack(self, messages):
+        for message in messages:
+            try: await message.ack_sync(timeout=5)
+            except Exception:
+                # Commit is already durable. ACK uncertainty never rewrites quality.
+                try: await message.nak(delay=5)
+                except Exception: pass
+
+    async def persist(self, entries):
+        if not entries: return 0
+        self.stages['normalizer']['operation']='persist'
+        try:
+            await self.store.record_normalizations([(e["capture_id"],e["result"]) for e in entries])
+        except (ValueError,TypeError) as exc:
+            self.stages["normalizer"]["fallbacks"]+=1
+            done=0
+            for entry in entries:
+                try: await self.store.record_normalization(entry["capture_id"],entry["result"])
+                except Exception as single:
+                    await self.nack([entry],single)
+                    self.stages["normalizer"]["failures"]+=1
+                else:
+                    await self.ack(entry["messages"]);done+=1
+            return done
+        except Exception as exc:
+            await self.nack(entries,exc)
+            raise
+        for entry in entries: await self.ack(entry["messages"])
+        return len(entries)
+
+    async def normalize(self):
+        self.stages['normalizer']['operation']='broker'
+        _,consumer=await self.broker()
+        self.stages['normalizer']['operation']='fetch'
+        try: messages=await consumer.fetch(batch=MAX_GROUP_CAPTURES,timeout=1)
+        except (NatsTimeoutError, asyncio.TimeoutError):
+            # nats-py can raise built-in TimeoutError when its remaining fetch
+            # deadline expires. This catch must not cover broker/DB/commit I/O.
+            stage=self.stages['normalizer']
+            stage['fetch_timeouts']=stage.get('fetch_timeouts',0)+1
+            return 0
+        group=[];seen={};count=rows=size=fields=0
+        for message in messages:
+            cid=None
+            try:
+                cid=UUID(json.loads(message.data)["capture_id"])
+                if cid in seen:
+                    seen[cid]["messages"].append(message);continue
+                self.stages['normalizer']['operation']='read_manifest'
+                capture=await self.store.get_capture(cid)
+                if capture is None: raise ValueError("Event has no manifest")
+                version = HOLDER_PARSER_VERSION if capture["metadata"]["endpoint"] == "token_top_holders" else NORMALIZER_VERSION
+                if any(r["normalizer_version"]==version and r["available_at"] is not None for r in capture["runs"]):
+                    await self.ack([message]);continue
+                metadata=CaptureMetadata.model_validate(capture["metadata"])
+                self.stages['normalizer']['operation']='read_raw'
+                raw=await asyncio.to_thread(self.store.raw.read,capture["raw_sha256"])
+                self.stages['normalizer']['operation']='normalize'
+                if metadata.endpoint == 'token_top_holders':
+                    holder_result = await asyncio.to_thread(parse_holders, metadata, raw)
+                    await HolderStore(self.store).record(holder_result)
+                    await self.ack([message]); count += 1
+                    continue
+                result=await asyncio.to_thread(normalize_capture,metadata,raw)
+                nbytes=Store.normalization_size(result)
+                # Keep the field-count work budget even with compressed packets;
+                # an indivisible capture still uses its normalizer contract.
+                if group_would_overflow(len(group),rows,size,len(result.facts),nbytes) or (group and fields+len(result.fields)>10000):
+                    previous=group;group=[];seen={};rows=size=fields=0
+                    count+=await self.persist(previous)
+                entry={"capture_id":cid,"result":result,"messages":[message]}
+                group.append(entry);seen[cid]=entry
+                rows+=len(result.facts);size+=nbytes;fields+=len(result.fields)
+            except Exception as exc:
+                await self.nack([{"capture_id":cid,"messages":[message]}],exc)
+                self.stages["normalizer"]["failures"]+=1
+                self.stages["normalizer"]["last_error"]={"type":type(exc).__name__,
+                    "operation":self.stages['normalizer'].get('operation')}
+        count+=await self.persist(group)
+        return count
+
+    async def apply(self, target, group):
+        if not group: return 0
+        try:
+            receipts=await asyncio.to_thread(self.sinks[target].apply_destination,group)
+            if set(receipts)!={b for b,_ in group}: raise ValueError("Receipt cardinality mismatch")
+            await self.deliveries.confirm(target,receipts)
+            done=len(group)
+        except (ValueError,TypeError,BatchConflict):
+            self.stages[target]["fallbacks"]+=1
+            done=0
+            for batch,rows in group:
+                try:
+                    receipt=await asyncio.to_thread(self.sinks[target].apply_destination,[(batch,rows)])
+                    await self.deliveries.confirm(target,receipt);done+=1
+                except Exception as exc:
+                    await self.deliveries.defer(target,batch,type(exc).__name__)
+                    self.stages[target]["failures"]+=1
+                    self.stages[target]["last_error"]=getattr(exc,"diagnostic",{"type":type(exc).__name__})
+                    # Resource failures still reach the destination circuit breaker
+                    # after a poison member caused individual isolation.
+                    if destination_retry_delay(target,exc,1):raise
+                    if not isinstance(exc,(ValueError,TypeError,BatchConflict)): break
+        except Exception as exc:
+            for batch,_ in group: await self.deliveries.defer(target,batch,type(exc).__name__)
+            raise
+        if target=="lake": self.lake_batches+=done
+        return done
+
+    async def deliver(self, target):
+        batches=await self.deliveries.pending(target)
+        group=[];rows=size=count=0
+        for batch in batches:
+            # Unsubmitted batches remain durable for the next owner.
+            if self.stop.is_set():return count
+            try:
+                content=await self.store.batch_rows(batch["batch_id"])
+                nbytes=batch_size(content)
+            except Exception as exc:
+                await self.deliveries.defer(target,batch["batch_id"],type(exc).__name__)
+                self.stages[target]["failures"]+=1
+                continue
+            if group_would_overflow(len(group),rows,size,len(content),nbytes,row_limit=MAX_GROUP_ROWS,capture_limit=MAX_DELIVERY_CAPTURES):
+                count+=await self.apply(target,group);group=[];rows=size=0
+            group.append((batch["batch_id"],content));rows+=len(content);size+=nbytes
+        return count if self.stop.is_set() else count+await self.apply(target,group)
+
+    async def maintenance(self):
+        if self.lake_batches<128: return 0
+        # Only the Lake instance's lock is held. Other stages do not join it.
+        processed=self.lake_batches
+        result=await asyncio.to_thread(self.sinks["lake"].compact_files,max_output_files=2,min_input_files=64)
+        self.lake_batches-=processed
+        self.stages["maintenance"]["last_result"]=result
+        return 1
+
+    async def pause(self, seconds):
+        try: await asyncio.wait_for(self.stop.wait(),timeout=seconds)
+        except TimeoutError: pass
+
+    async def run_stage(self, name, operation, idle=0.5):
+        status=self.stages[name]
+        restored=name!='lake'
+        while not self.stop.is_set():
+            if not restored:
+                try:
+                    saved=await self.store.pool.fetchval("SELECT details FROM worker_health WHERE worker_name=$1",'data-'+name)
+                    status.update(destination_retry_state(saved,utcnow()))
+                    restored=True
+                except Exception:
+                    status.update(state='degraded',reason='retry_state_unavailable')
+                    await self.pause(2);continue
+            retry_at=status.get('retry_at')
+            if retry_at:
+                remaining=(datetime.fromisoformat(retry_at)-utcnow()).total_seconds()
+                if remaining>0:
+                    status.update(state='degraded',reason='destination_cooldown')
+                    await self.pause(min(30,remaining));continue
+                status.pop('retry_at',None);status.pop('retry_after_seconds',None)
+            started=time.monotonic()
+            try:
+                capacity=await asyncio.to_thread(self.store.raw.admission)
+                if not capacity["accepting"]:
+                    status.update(state="paused",reason="storage_backpressure")
+                    await self.pause(1);continue
+                status.pop("reason",None)
+                status["inflight_since"]=utcnow().isoformat()
+                failures=status["failures"]
+                done=await operation()
+                status["completed"]+=done
+                status["last_duration_ms"]=round((time.monotonic()-started)*1000,2)
+                status["last_progress_at"]=utcnow().isoformat() if done else status.get("last_progress_at")
+                status["state"]="ready" if status["failures"]==failures else "degraded"
+                if status["state"]=="ready":
+                    status.pop("last_error",None)
+                    status.pop('retry_after_seconds',None)
+                    status['consecutive_destination_failures']=0
+                delay=0 if done else idle
+            except Exception as exc:
+                status["state"]="degraded";status["failures"]+=1
+                diagnostic=getattr(exc,"diagnostic",{"type":type(exc).__name__})
+                status["last_error"]={**diagnostic,
+                    "operation":diagnostic.get('operation') or status.get('operation'),
+                    "stage_operation":status.get('operation'),"duration_ms":round((time.monotonic()-started)*1000,2)}
+                log.error("stage_failed stage=%s diagnostic=%s",name,json.dumps(status["last_error"]))
+                consecutive=status.get('consecutive_destination_failures',0)+1
+                cooldown=destination_retry_delay(name,exc,consecutive)
+                if cooldown:
+                    status.update(reason='destination_cooldown',consecutive_destination_failures=consecutive,
+                        retry_after_seconds=cooldown,retry_at=(utcnow()+timedelta(seconds=cooldown)).isoformat())
+                delay=min(30,cooldown) if cooldown else 2
+            finally:status.pop("inflight_since",None)
+            await self.pause(delay)
+
+    async def watch(self, owner):
+        while not self.stop.is_set():
+            # Ownership uncertainty still aborts every stage. A failed telemetry
+            # write instead expires readiness and retries without dropping work.
+            await owner.fetchval("SELECT 1")
+            try:
+                for name,details in self.stages.items():
+                    await self.deliveries.heartbeat(name,details["state"],details)
+                states={s["state"] for s in self.stages.values()}
+                state="degraded" if "degraded" in states else "paused" if "paused" in states else "ready"
+                await self.store.heartbeat(state,{"reason":"storage_backpressure" if state=="paused" else None,
+                    "stages":self.stages,"liveness":True,"resources":await asyncio.to_thread(resource_snapshot)})
+            except (TimeoutError, asyncpg.QueryCanceledError, asyncpg.PostgresConnectionError) as exc:
+                log.error("heartbeat_write_failed type=%s", type(exc).__name__)
+            await self.pause(5)
+
+    async def run(self, owner):
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(self.run_stage("relay",self.relay))
+            tasks.create_task(self.run_stage("normalizer",self.normalize))
+            tasks.create_task(self.run_stage("lake",lambda:self.deliver("lake")))
+            tasks.create_task(self.run_stage("clickhouse",lambda:self.deliver("clickhouse")))
+            tasks.create_task(self.run_stage("maintenance",self.maintenance,idle=5))
+            tasks.create_task(self.run_stage("registry",self.registry.step,idle=2))
+            tasks.create_task(self.run_stage("research",self.research.step,idle=5))
+            tasks.create_task(self.watch(owner))
+
+    async def close(self):
+        # Join both destination processes before releasing PostgreSQL ownership.
+        try:
+            results=await asyncio.gather(*(asyncio.to_thread(s.close) for s in self.sinks.values()),return_exceptions=True)
+            for result in results:
+                if isinstance(result,BaseException):raise result
+        finally:
+            if self.connection is not None: await self.connection.close()
 
 
 async def serve(settings: Settings):
-    store=await Store(settings.database_dsn,RawStore(settings.raw_path,settings.max_capture_bytes)).open()
-    sinks=AnalyticsSinks(settings.lake_catalog_dsn,settings.lake_path,settings.clickhouse_url,
-                         settings.clickhouse_user,settings.clickhouse_password)
-    stopping=asyncio.Event()
-    loop=asyncio.get_running_loop()
-    for sig in (signal.SIGTERM,signal.SIGINT):
-        loop.add_signal_handler(sig,stopping.set)
-    connection=owner=None
-    iteration_error=None
-    metrics={}
-    batches_since_maintenance=0
-
-    owner_probe_lock=asyncio.Lock()
-
-    async def check_owner():
-        # asyncpg permits only one operation per physical connection. The
-        # session remains the sole distributed owner for both bounded stages.
-        async with owner_probe_lock:
-            await owner.fetchval("SELECT 1")
-
-    async def acknowledge(message):
-        nonlocal iteration_error
-        try:
-            await message.ack_sync(timeout=5)
-        except Exception as exc:
-            # Facts are already committed. A transport ACK failure must not
-            # rewrite their data-quality status; broker replay confirms the run.
-            iteration_error=type(exc).__name__
-            log.error("capture_ack_failed type=%s",iteration_error)
-            try:
-                await message.nak(delay=5)
-            except Exception:
-                pass
-
-    async def failed_capture(capture_id, messages, exc):
-        nonlocal iteration_error
-        code=type(exc).__name__
-        iteration_error=code
-        log.error("normalization_failed type=%s capture_id=%s",code,capture_id)
-        if capture_id:
-            await store.pool.execute("UPDATE captures SET last_error=$2 WHERE capture_id=$1",capture_id,code)
-            await store.pool.execute("UPDATE outbox SET last_error=$2 WHERE capture_id=$1",capture_id,code)
-        for message in messages:
-            try:
-                await message.nak(delay=5)
-            except Exception:
-                pass
-
-    async def persist_normalizations(group):
-        nonlocal iteration_error
-        if not group:
-            return
-        items=[(entry["capture_id"],entry["result"]) for entry in group]
-        persist_started=time.monotonic()
-        try:
-            await check_owner()
-            outputs=await store.record_normalizations(items)
-            if len(outputs) != len(group):
-                raise RuntimeError("Normalization group reply cardinality mismatch")
-            completed=group
-            metrics["normalization_groups"]+=1
-        except Exception as exc:
-            # The grouped transaction rolls back on a bad member. Isolate it
-            # using the same immutable single-capture protocol so it cannot
-            # prevent valid neighbors from publishing.
-            iteration_error=type(exc).__name__
-            metrics["normalization_group_fallbacks"]+=1
-            log.error("normalization_group_failed type=%s size=%s",iteration_error,len(group))
-            completed=[]
-            for entry in group:
-                try:
-                    await check_owner()
-                    await store.record_normalization(entry["capture_id"],entry["result"])
-                    completed.append(entry)
-                except Exception as single_exc:
-                    await failed_capture(entry["capture_id"],entry["messages"],single_exc)
-        metrics["normalization_persist_ms"]+=round((time.monotonic()-persist_started)*1000,2)
-        for entry in completed:
-            metrics["normalized"]+=1
-            metrics["facts"]+=len(entry["result"].facts)
-            metrics["fields"]+=len(entry["result"].fields)
-            for message in entry["messages"]:
-                await acknowledge(message)
-
-    async def persist_analytics(group):
-        nonlocal iteration_error,batches_since_maintenance
-        if not group:
-            return
-        try:
-            await check_owner()
-            receipts=await asyncio.to_thread(sinks.apply_batches,group)
-            if set(receipts) != {batch_id for batch_id,_ in group}:
-                raise RuntimeError("Analytics group reply identity mismatch")
-            await store.mark_analytics_many(receipts)
-            metrics["analytics_groups"]+=1
-            metrics["analytics_batches"]+=len(group)
-            batches_since_maintenance+=len(group)
-        except Exception as exc:
-            iteration_error=type(exc).__name__
-            metrics["analytics_group_fallbacks"]+=1
-            log.error("analytics_group_failed type=%s size=%s",iteration_error,len(group))
-            for batch_id,rows in group:
-                try:
-                    await check_owner()
-                    receipt=await asyncio.to_thread(sinks.apply_batch,batch_id,rows)
-                    await store.mark_analytics(batch_id,receipt)
-                    metrics["analytics_batches"]+=1
-                    batches_since_maintenance+=1
-                except Exception as single_exc:
-                    iteration_error=type(single_exc).__name__
-                    log.error("analytics_failed type=%s batch_id=%s",iteration_error,batch_id)
-                    await store.defer_analytics(batch_id,iteration_error)
-                    await store.heartbeat("degraded",{"error_type":iteration_error,"batch_id":batch_id})
-                    # A content conflict must not block valid neighbors; an
-                    # unavailable sink stops retries to avoid a request storm.
-                    if not isinstance(single_exc, (ValueError, BatchConflict)):
-                        await asyncio.sleep(1)
-                        break
-
-    async def normalize_messages(messages):
-        normalization_started=time.monotonic()
-        metrics["messages"]=len(messages)
-        group=[]
-        pending_ids={}
-        group_rows=group_bytes=0
-        for message in messages:
-            capture_id=None
-            try:
-                capture_id=UUID(json.loads(message.data)["capture_id"])
-                if capture_id in pending_ids:
-                    pending_ids[capture_id]["messages"].append(message)
-                    metrics["replayed"]+=1
-                    continue
-                read_started=time.monotonic()
-                capture=await store.get_capture(capture_id)
-                metrics["capture_read_ms"]+=round((time.monotonic()-read_started)*1000,2)
-                if capture is None:
-                    raise RuntimeError("Event has no capture manifest")
-                if any(run["normalizer_version"]==NORMALIZER_VERSION and run["available_at"] is not None for run in capture["runs"]):
-                    await acknowledge(message)
-                    metrics["replayed"]+=1
-                    continue
-                metadata=CaptureMetadata.model_validate(capture["metadata"])
-                raw=await asyncio.to_thread(store.raw.read,capture["raw_sha256"])
-                compute_started=time.monotonic()
-                result=await asyncio.to_thread(normalize_capture,metadata,raw)
-                metrics["normalization_compute_ms"]+=round((time.monotonic()-compute_started)*1000,2)
-                envelope_started=time.monotonic()
-                size=Store.normalization_size(result)
-                metrics["normalization_envelope_ms"]+=round((time.monotonic()-envelope_started)*1000,2)
-                if group_would_overflow(len(group),group_rows,group_bytes,len(result.facts),size):
-                    await persist_normalizations(group)
-                    group=[]
-                    pending_ids={}
-                    group_rows=group_bytes=0
-                entry={"capture_id":capture_id,"result":result,"messages":[message]}
-                group.append(entry)
-                pending_ids[capture_id]=entry
-                group_rows+=len(result.facts)
-                group_bytes+=size
-            except Exception as exc:
-                await failed_capture(capture_id,[message],exc)
-        await persist_normalizations(group)
-        # Release output objects when this bounded normalization stage finishes.
-        group.clear()
-        pending_ids.clear()
-        metrics["normalization_ms"]=round((time.monotonic()-normalization_started)*1000,2)
-
-
-    async def apply_pending_batches():
-        nonlocal iteration_error
-        analytics_started=time.monotonic()
-        batches=await store.pool.fetch(
-            """SELECT batch_id FROM normalization_runs WHERE available_at IS NOT NULL
-               AND analytics_applied_at IS NULL
-               AND (analytics_retry_at IS NULL OR analytics_retry_at<=statement_timestamp())
-               ORDER BY analytics_retry_at NULLS FIRST,recorded_at,batch_id LIMIT 8""")
-        analytical_group=[]
-        group_rows=group_bytes=0
-        for batch in batches:
-            try:
-                rows=await store.batch_rows(batch["batch_id"])
-                size=batch_size(rows)
-                if group_would_overflow(len(analytical_group),group_rows,group_bytes,len(rows),size):
-                    await persist_analytics(analytical_group)
-                    analytical_group=[]
-                    group_rows=group_bytes=0
-                analytical_group.append((batch["batch_id"],rows))
-                group_rows+=len(rows)
-                group_bytes+=size
-            except Exception as exc:
-                iteration_error=type(exc).__name__
-                log.error("analytics_prepare_failed type=%s batch_id=%s",iteration_error,batch["batch_id"])
-                await store.defer_analytics(batch["batch_id"],iteration_error)
-                if not isinstance(exc, (ValueError, BatchConflict)):
-                    break
-        await persist_analytics(analytical_group)
-        analytical_group.clear()
-        metrics["analytics_ms"]=round((time.monotonic()-analytics_started)*1000,2)
-
+    store=await Store(settings.database_dsn,RawStore(settings.raw_path,settings.max_capture_bytes,
+        min_free_bytes=settings.raw_min_free_bytes,host_capacity_path=settings.raw_host_capacity_path)).open()
+    stop=asyncio.Event();loop=asyncio.get_running_loop()
+    for sig in (signal.SIGTERM,signal.SIGINT):loop.add_signal_handler(sig,stop.set)
+    pipeline=Pipeline(settings,store,stop);owner=None
     try:
         owner=await store.pool.acquire()
         if not await owner.fetchval("SELECT pg_try_advisory_lock(60608002)"):
             raise RuntimeError("Another data worker owns the pipeline")
-        connection=await nats.connect(settings.nats_url,connect_timeout=5,max_reconnect_attempts=5)
-        js=connection.jetstream(timeout=10)
-        await ensure_stream(js)
-        await asyncio.to_thread(sinks.ensure_schema)
-        consumer=await js.pull_subscribe(
-            "midas.data.capture",durable="normalizer-v1",stream="MIDAS_DATA",
-            config=ConsumerConfig(durable_name="normalizer-v1",ack_policy=AckPolicy.EXPLICIT,
-                                  deliver_policy=DeliverPolicy.ALL,ack_wait=120,max_ack_pending=32,max_deliver=-1),
-        )
-        await store.heartbeat("ready")
-        last_heartbeat=0.0
-        maintenance=None
-        maintenance_error=None
-        while not stopping.is_set():
-            iteration_error=None
-            iteration_started=time.monotonic()
-            metrics={key:0 for key in (
-                "messages","normalized","replayed","facts","fields","analytics_batches",
-                "normalization_groups","normalization_group_fallbacks","analytics_groups","analytics_group_fallbacks",
-                "normalization_compute_ms","normalization_persist_ms","normalization_envelope_ms","capture_read_ms")}
-            await check_owner()
-            pending=await store.pool.fetch(
-                """SELECT capture_id FROM outbox WHERE consumed_at IS NULL
-                AND (published_at IS NULL OR published_at<$1) ORDER BY published_at NULLS FIRST LIMIT 16""",
-                utcnow()-timedelta(seconds=15))
-            published=[]
-            for row in pending:
-                capture_id=str(row["capture_id"])
-                await js.publish("midas.data.capture",json.dumps({"capture_id":capture_id}).encode(),
-                                 headers={"Nats-Msg-Id":capture_id})
-                published.append(row["capture_id"])
-            if published:
-                # If this commit is uncertain, the same message IDs are retried.
-                # Only positively acknowledged publications are recorded.
-                async with store.pool.acquire() as con:
-                    async with con.transaction():
-                        marker=utcnow()
-                        await con.executemany(
-                            "UPDATE outbox SET published_at=$2,publish_count=publish_count+1,last_error=NULL WHERE capture_id=$1",
-                            [(capture_id,marker) for capture_id in published])
-            try:
-                messages=await consumer.fetch(batch=MAX_GROUP_CAPTURES,timeout=1)
-            except NatsTimeoutError:
-                messages=[]
-            # Separate resources can make progress concurrently. Both stages are
-            # bounded and joined before maintenance, heartbeat or lock release.
-            async with asyncio.TaskGroup() as stages:
-                stages.create_task(normalize_messages(messages))
-                stages.create_task(apply_pending_batches())
-            if batches_since_maintenance >= 128 and not iteration_error:
-                batches_since_maintenance=0
-                maintenance_started=time.monotonic()
-                try:
-                    await check_owner()
-                    maintenance=await asyncio.to_thread(sinks.compact_files,max_output_files=2,min_input_files=64)
-                    maintenance_error=None
-                except Exception as exc:
-                    maintenance_error=type(exc).__name__
-                    log.error("maintenance_failed type=%s",maintenance_error)
-                metrics["maintenance_ms"]=round((time.monotonic()-maintenance_started)*1000,2)
-            metrics["iteration_ms"]=round((time.monotonic()-iteration_started)*1000,2)
-            if time.monotonic()-last_heartbeat>5:
-                outstanding_errors=await store.pool.fetchval("""SELECT
-                    (SELECT count(*) FROM captures WHERE last_error IS NOT NULL) +
-                    (SELECT count(*) FROM normalization_runs WHERE analytics_applied_at IS NULL AND analytics_last_error IS NOT NULL)""")
-                await store.heartbeat("degraded" if iteration_error or maintenance_error or outstanding_errors else "ready",
-                                      {"error_type":iteration_error,"captures_with_error":outstanding_errors,"last_iteration":metrics,
-                                       "maintenance_error":maintenance_error,"last_maintenance":maintenance})
-                last_heartbeat=time.monotonic()
+        await pipeline.run(owner)
         await store.heartbeat("stopped")
     finally:
-        try:
-            if connection:
-                await connection.close()
+        stop.set()
+        try: await pipeline.close()
         finally:
-            # Cancellation of to_thread does not stop its synchronous operation.
-            # close takes the sink lock and drains it before owner release, even
-            # when broker shutdown raises. Store cleanup is guaranteed as well.
             try:
-                await asyncio.to_thread(sinks.close)
-            finally:
-                try:
-                    if owner:
-                        await store.pool.release(owner)
-                finally:
-                    await store.close()
+                if owner is not None: await store.pool.release(owner)
+            finally: await store.close()
 
 
 def main():
-    logging.basicConfig(level=logging.INFO,format="%(asctime)s %(name)s %(message)s")
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.basicConfig(level=logging.INFO,format="%(asctime)s midas-data %(message)s")
     asyncio.run(serve(Settings.from_env()))
+

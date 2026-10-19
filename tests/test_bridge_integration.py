@@ -48,7 +48,7 @@ def _env():
 
 
 @asynccontextmanager
-async def _fixture(*, age_minutes=3, queue_limit=500):
+async def _fixture(*, age_minutes=3):
     import asyncpg
     from midas_data.bridge import Bridge, BridgeConfig, PgSource
 
@@ -105,13 +105,18 @@ async def _fixture(*, age_minutes=3, queue_limit=500):
         source = CountedSource(source_connection)
         config = BridgeConfig(
             source_name="fixture:" + suffix, origin_at=origin,
-            binding="midas_data/" + schema, source_kind="fixture", queue_limit=queue_limit,
+            binding="midas_data/" + schema, source_kind="fixture",
         )
         async with httpx.AsyncClient(
             base_url=api, headers={"authorization": "Bearer " + key},
             timeout=httpx.Timeout(12, connect=3), trust_env=False,
         ) as client:
             replies = []
+
+            async def admission():
+                reply = await client.get("/v1/admission")
+                reply.raise_for_status()
+                return reply.json()
 
             async def deliver(capture):
                 reply = await client.post(
@@ -125,11 +130,11 @@ async def _fixture(*, age_minutes=3, queue_limit=500):
                 replies.append(value)
                 return value
 
-            bridge = await Bridge(config, destination, source, deliver).open()
+            bridge = await Bridge(config, destination, source, deliver, admission).open()
             yield _BridgeFixture(
                 dsn=dsn, schema=schema, writer=writer, second=second,
                 db=destination, source=source, config=config, bridge=bridge,
-                client=client, replies=replies, deliver=deliver, origin=origin,
+                client=client, replies=replies, deliver=deliver, admission=admission, origin=origin,
             )
     finally:
         for connection in (source_connection, destination, second):
@@ -316,7 +321,7 @@ async def _lost_ack():
         await f.db.close()  # Real connection/session loss, not Docker control.
         f.db = await asyncpg.connect(f.dsn, command_timeout=10)
         try:
-            resumed = await Bridge(f.config, f.db, f.source, f.deliver).open()
+            resumed = await Bridge(f.config, f.db, f.source, f.deliver, f.admission).open()
             await resumed.step()
             assert (await _ledger(f, call.id))["state"] == "accepted"
             assert (await _state(f))["progress"] != before
@@ -389,19 +394,18 @@ async def _source_mutation():
         await _ready(f, call.id)
 
 
-def test_queue_backpressure_is_bounded_and_preserves_cursor_without_reading_source_pages():
-    asyncio.run(_queue_backpressure())
+def test_capture_continues_while_normalization_publication_is_blocked():
+    asyncio.run(_capture_despite_backlog())
 
 
-async def _queue_backpressure():
-    async with _fixture(queue_limit=1) as f:
+async def _capture_despite_backlog():
+    async with _fixture() as f:
         call = await _insert(f)
         before = (await _state(f))["progress"]
         transaction = f.writer.transaction()
         await transaction.start()
         try:
-            # This real gate holds normalization publication, keeping one
-            # authenticated fixture accepted but pending while the bridge probes.
+            # Hold downstream publication: raw acceptance must stay independent.
             await f.writer.execute("SELECT pg_advisory_xact_lock(60608003)")
             token = "0x" + uuid4().hex + uuid4().hex[:8]
             stamp = datetime.now(UTC) - timedelta(seconds=1)
@@ -419,14 +423,12 @@ async def _queue_backpressure():
             assert response.status_code == 202
             pages_before, blobs_before = f.source.pages, f.source.blobs
             info = await f.bridge.step()
-            assert info["state"] == "paused"
-            assert 1 <= info["pending_bounded"] <= 2
+            assert info["page"]["accepted"] == 1
             after = await _state(f)
-            assert after["last_error"] == "queue_backpressure"
-            assert after["progress"] == before
-            assert await _ledger(f, call.id) is None
-            assert f.source.pages == pages_before and f.source.blobs == blobs_before
-            assert f.replies == []
+            assert after["last_error"] is None and after["progress"] != before
+            assert (await _ledger(f, call.id))["state"] == "accepted"
+            assert f.source.pages == pages_before+1 and f.source.blobs == blobs_before+1
+            assert len(f.replies) == 1
         finally:
             await transaction.rollback()
         await _ready(f, UUID(capture_id))

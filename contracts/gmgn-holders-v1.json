@@ -1,0 +1,313 @@
+{
+  "contract_id": "gmgn.token_top_holders.v1",
+  "status": "offline_parser_implemented",
+  "checkpoint": "CP-HOLDERS-PARSER-01",
+  "stage": "6.1.2",
+  "provider": "gmgn",
+  "endpoint": "token_top_holders",
+  "route": {
+    "method": "GET",
+    "path": "/v1/market/token_top_holders",
+    "auth": "exist",
+    "documented_weight": 5,
+    "live_quota_verified": false
+  },
+  "sample_verified_chains": [
+    "sol"
+  ],
+  "runtime": {
+    "adapter_registered": false,
+    "collector_enabled": false,
+    "persistence_implemented": false
+  },
+  "response": {
+    "verified_sample_format": "cli_data_object",
+    "rows_pointer": "/list",
+    "row_pointer_pattern": "/list/{index}",
+    "original_http_envelope_verified": false,
+    "empty_list": "successful_subset_with_zero_rows_not_zero_total_holders",
+    "empty_file": "failure_not_empty_list",
+    "total_population_known": false,
+    "pagination_contract": null,
+    "accepted_evidence_kind": "legacy_reserialized"
+  },
+  "request_context": {
+    "token_identity": [
+      "chain",
+      "address"
+    ],
+    "selection_fields": [
+      "limit",
+      "order_by",
+      "direction",
+      "tag"
+    ],
+    "documented_default_limit": 20,
+    "documented_max_limit": 100,
+    "documented_order_by": [
+      "amount_percentage",
+      "profit",
+      "unrealized_profit",
+      "buy_volume_cur",
+      "sell_volume_cur"
+    ],
+    "documented_default_order_by": "amount_percentage",
+    "documented_direction": [
+      "asc",
+      "desc"
+    ],
+    "documented_default_direction": "desc",
+    "tag_omitted": "no_explicit_tag_filter_not_complete_population",
+    "tag_values": [
+      "smart_degen",
+      "renowned",
+      "fresh_wallet",
+      "dev",
+      "sniper",
+      "rat_trader",
+      "bundler",
+      "transfer_in",
+      "dex_bot",
+      "bluechip_owner"
+    ],
+    "future_collection_proposal": {
+      "chain": "sol",
+      "limit": 20,
+      "order_by": "amount_percentage",
+      "direction": "desc",
+      "tag": null,
+      "enabled": false
+    },
+    "legacy_missing_context": "preserve_unknown_do_not_apply_current_defaults",
+    "identity_conflict": "reject_semantic_rows_preserve_raw_and_issue",
+    "explicit_invalid_selection": "issue_no_holders_no_default_substitution"
+  },
+  "row_contract": {
+    "grain": [
+      "capture_id",
+      "contract_version",
+      "row_pointer"
+    ],
+    "dimensions": [
+      "chain",
+      "token_address",
+      "wallet_address",
+      "token_account_address"
+    ],
+    "token_address_source": "request_params.address",
+    "wallet_address_source": "/list/{index}/address",
+    "chain_rule": "explicit_capture_chain_matches_request_chain_no_alias_inference",
+    "solana_address_case": "preserve",
+    "max_address_utf8_bytes": 256,
+    "invalid_wallet_address": "issue_and_no_semantic_row_raw_retained",
+    "duplicate_wallets": "retain_rows_and_flag_ambiguity_no_implicit_sum_or_dedup",
+    "token_fact_projection": false,
+    "optional_account_address": "preserve_missing_never_substitute_wallet_address",
+    "model": "HolderObservation",
+    "duplicate_identity_quality": "unverified",
+    "values_type_columns": {
+      "value_type": "observed_JSON_type",
+      "declared_type": "contract_semantic_type"
+    }
+  },
+  "fields": [
+    {
+      "pointer": "/list/{index}/address",
+      "name": "wallet_address",
+      "role": "wallet_identity",
+      "value_type": "string",
+      "unit": null,
+      "acceptance": "nonempty_bounded_string",
+      "semantic_status": "provider_documented",
+      "p0": [
+        "P0-05"
+      ]
+    },
+    {
+      "pointer": "/list/{index}/account_address",
+      "name": "token_account_address",
+      "role": "token_account_identity",
+      "value_type": "string",
+      "unit": null,
+      "acceptance": "nonempty_bounded_string_when_present",
+      "semantic_status": "provider_documented_not_owner_mint_verified",
+      "p0": [
+        "P0-06"
+      ]
+    },
+    {
+      "pointer": "/list/{index}/balance",
+      "name": "wallet_token_balance",
+      "role": "metric",
+      "value_type": "decimal",
+      "unit": "token",
+      "acceptance": "finite_nonnegative_decimal",
+      "semantic_status": "provider_reported_human_units",
+      "p0": [
+        "P0-46"
+      ]
+    },
+    {
+      "pointer": "/list/{index}/amount_cur",
+      "name": "wallet_token_balance_alias",
+      "role": "alias_evidence",
+      "value_type": "decimal",
+      "unit": "token",
+      "acceptance": "finite_nonnegative_decimal",
+      "semantic_status": "provider_documented_alias_balance",
+      "p0": [
+        "P0-46"
+      ]
+    },
+    {
+      "pointer": "/list/{index}/amount_percentage",
+      "name": "wallet_supply_share_reported",
+      "role": "metric",
+      "value_type": "decimal",
+      "unit": "fraction",
+      "acceptance": "finite_decimal_between_zero_and_one",
+      "semantic_status": "provider_reported_share_not_independently_verified",
+      "denominator": "provider_total_supply",
+      "denominator_method_verified": false,
+      "p0": [
+        "P0-47"
+      ]
+    },
+    {
+      "pointer": "/list/{index}/native_balance",
+      "name": "wallet_native_balance_raw",
+      "role": "metric",
+      "value_type": "integer",
+      "unit": "lamport",
+      "applies_to_chain": "sol",
+      "acceptance": "exact_nonnegative_integer_or_ascii_integer_text_no_bool",
+      "semantic_status": "provider_reported_smallest_native_unit",
+      "p0": []
+    },
+    {
+      "pointer": "/list/{index}/usd_value",
+      "name": "wallet_holdings_value_reported",
+      "role": "metric",
+      "value_type": "decimal",
+      "unit": "USD",
+      "acceptance": "finite_nonnegative_decimal",
+      "semantic_status": "provider_reported_valuation_not_execution_price",
+      "p0": []
+    }
+  ],
+  "numeric_policy": {
+    "parser": "Decimal_from_saved_bytes_no_float_conversion",
+    "inputs": "finite_JSON_number_or_strict_numeric_text_no_boolean",
+    "absent_key": "no_value_and_no_zero",
+    "null_or_empty_text": "missing",
+    "malformed_or_out_of_range": "invalid_preserve_source_value_and_pointer",
+    "alias_policy": "balance_is_primary_no_silent_fallback_to_amount_cur",
+    "alias_conflict": "both_sources_preserved_quality_unverified_issue_balance_alias_conflict",
+    "precision_limit": "saved_CLI_numbers_may_have_already_passed_through_JS_Number",
+    "transformations_forbidden": [
+      "divide_balance_by_10_pow_decimals",
+      "divide_share_by_100_by_magnitude",
+      "sum_balance_and_amount_cur",
+      "convert_native_balance_into_queried_token_balance"
+    ]
+  },
+  "provenance": {
+    "required_snapshot": [
+      "capture_id",
+      "raw_sha256",
+      "contract_version",
+      "source_kind",
+      "evidence_kind",
+      "request_params",
+      "requested_at",
+      "received_at"
+    ],
+    "required_field": [
+      "row_pointer",
+      "field_pointer",
+      "value_text",
+      "value_type",
+      "unit",
+      "quality",
+      "reason"
+    ],
+    "clocks": "UTC_GMT0",
+    "source_event_at": "null_unless_explicit_snapshot_event_time",
+    "occurred_at": "received_at_proxy_when_source_event_at_absent",
+    "available_at": "assigned_by_existing_writer_on_publication_never_backdated",
+    "cli_sample_clocks": "process_started_and_finished_only_not_original_HTTP_request_receive",
+    "sample_evidence_kind": "legacy_reserialized",
+    "sample_http_status": null,
+    "supplied_activity_timestamps": "attributes_not_snapshot_clocks"
+  },
+  "deferred": [
+    "holder_runtime_registration_and_real_capture_metadata",
+    "holder_persistence_projection_and_bounded_query",
+    "original_HTTP_envelope_and_transport_clocks",
+    "live_freshness_restart_and_quota_validation",
+    "other_chains",
+    "P0-45_total_holder_count_not_derived_from_list_length",
+    "P0-48_top10_not_derived_from_filtered_or_incomplete_list",
+    "P_and_L_flow_tags_risk_social_and_funding_metrics",
+    "traders_dev_pools_and_social_family_expansion"
+  ],
+  "source_review": {
+    "checked_at_utc": "2026-09-11T02:22:29.422365+00:00",
+    "commit": "ec95135ecabfdf617c0690a28af64e84d22d5210",
+    "sources": [
+      {
+        "path": "src/commands/token.ts",
+        "url": "https://github.com/GMGNAI/gmgn-skills/blob/ec95135ecabfdf617c0690a28af64e84d22d5210/src/commands/token.ts",
+        "sha256": "69b77ffdfe328204fa99448fc67255ac280b128e615e764702e29f6431235158",
+        "bytes": 4964
+      },
+      {
+        "path": "src/client/OpenApiClient.ts",
+        "url": "https://github.com/GMGNAI/gmgn-skills/blob/ec95135ecabfdf617c0690a28af64e84d22d5210/src/client/OpenApiClient.ts",
+        "sha256": "ad21fcee9de342bfc273084a0cff549f9d8b59e9dc17c5193969a7ee443bdaeb",
+        "bytes": 28895
+      },
+      {
+        "path": "skills/gmgn-token/SKILL.md",
+        "url": "https://github.com/GMGNAI/gmgn-skills/blob/ec95135ecabfdf617c0690a28af64e84d22d5210/skills/gmgn-token/SKILL.md",
+        "sha256": "f990130565bfe76c437b21a6f46baf8634f029817d7ea9b57d03642bf4ad0dcb",
+        "bytes": 41189
+      }
+    ]
+  },
+  "evidence_report": ".scratch/checkpoint-holders-contract-20260910/evidence_audit.json",
+  "offline_parser": {
+    "module": "midas_data.holders",
+    "entrypoint": "parse_holders",
+    "version": "gmgn-holders-offline-v1",
+    "result_model": "HolderParseResult",
+    "implemented": true,
+    "registered_in_runtime": false,
+    "io": false,
+    "requires_explicit_capture_metadata": true,
+    "archived_cli_sample_metadata": "fixture_only_when_original_HTTP_clocks_or_status_unavailable"
+  },
+  "parser_acceptance": [
+    "offline_separate_holder_rows_not_token_Fact",
+    "preserve_raw_field_pointers_and_request_selection",
+    "sample_success_empty_list_and_failed_cli_separated",
+    "fixture_wallet_token_identity_conflict_missing_and_duplicates",
+    "fixture_numeric_precision_native_unit_share_bounds_alias_conflict",
+    "fixture_bytes_nodes_rows_limits_no_silent_truncation",
+    "no_provider_calls_no_SQL_schema_no_runtime_activation"
+  ],
+  "next_acceptance": [
+    "separate_holder_persistence_and_bounded_query",
+    "idempotent_snapshot_rows_with_raw_provenance",
+    "explicit_truthful_HTTP_envelope_status_and_clocks_before_real_ingestion"
+  ],
+  "offline_adapter_limits": {
+    "max_raw_bytes": 8388608,
+    "max_json_nodes": 20000,
+    "max_json_depth": 32,
+    "max_rows": 100,
+    "overflow": "explicit_issue_no_silent_truncation",
+    "max_output_bytes": 16777216
+  },
+  "parser_evidence_report": ".scratch/checkpoint-holders-parser-20260910/sample-replay.json"
+}

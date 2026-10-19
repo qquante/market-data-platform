@@ -1,5 +1,7 @@
 # GMGN — coleta contínua e contratos da base Docker
 
+> Registro histórico anterior ao reset de 09/09/2026. Dados, dumps e evidências listados em .data/gmgn-data/evidence e .data/gmgn-data/backups foram incluídos na limpeza; links podem estar indisponíveis. Não representa runtime ou restauração atual. Estado e evidências preservadas: [SESSION_SUMMARY_20260909.md](SESSION_SUMMARY_20260909.md).
+
 Sessão S-DB-20260908-02. Escopo: conectar a captura já existente à fundação isolada, ampliar contratos comprovados e planejar a migração histórica. Os resultados abaixo vêm de código, testes e Docker real. A coleta está conectada e os mecanismos de integridade passaram nos gates. A capacidade de recuperar o atraso acumulado ainda não está homologada; o fechamento distingue esse limite da integridade dos dados.
 
 ## Entrega
@@ -26,7 +28,7 @@ O inventário e as fontes campo a campo estão em [FIELD_CONTRACTS](FIELD_CONTRA
 
 ## Confiabilidade
 
-A imagem ac61520d72a2a6f01e7972281a4fc5c85a823d0f94d2ebcc5f010930331e1f1d passou em 419 casos executados, zero falhas/erros e 22 skips, em 76,214 segundos. Os skips pertencem ao host PowerShell e à integração agrupada opt-in, com gates separados. A contagem não soma testes sobrepostos nem trata o agregado de subtestes do JUnit como novos casos independentes. [Suíte final](../.data/gmgn-data/evidence/continuous-pipeline-release.xml), [grupos e retry](../.data/gmgn-data/evidence/continuous-retry-groups.xml), [inventário de gates](../.data/gmgn-data/evidence/continuous-gates.json).
+A imagem Docker 302e912b8747f172c43374ac8124610032eb2ec43380fcad1a20013e71191c16 passou em 419 casos executados, zero falhas/erros e 22 skips, em 76,214 segundos. Os skips pertencem ao host PowerShell e à integração agrupada opt-in, com gates separados. A contagem não soma testes sobrepostos nem trata o agregado de subtestes do JUnit como novos casos independentes. [Suíte final](../.data/gmgn-data/evidence/continuous-pipeline-release.xml), [grupos e retry](../.data/gmgn-data/evidence/continuous-retry-groups.xml), [inventário de gates](../.data/gmgn-data/evidence/continuous-gates.json).
 
 - Testes em Docker cobrem precisão decimal, UTC, null/false/zero, bytes e hashes, isolamento de fixtures, publicação temporal, versões e consultas as-known.
 - Testes da ponte cobrem paginação com timestamps iguais, commit atrasado, ACK perdido após aceite real, reinício de sessão, duplicação, mudança de identidade, indisponibilidade, rejeição e backpressure.
@@ -84,3 +86,40 @@ As métricas separadas mostraram uma iteração com 8.364 fatos e 18.396 campos:
 O script de backup atualizado passou também em 22 testes locais do PowerShell; esse gate valida o contrato do script, enquanto a restauração real tem evidência própria.
 
 Captura de posts do X, estratégias, marcos por market cap e migração histórica integral continuam fora da implementação desta etapa. O próximo trabalho é estabilizar capacidade e crescimento físico, mantendo as provas de identidade, temporalidade, consulta e recuperação.
+## Backup da versão atual
+
+Backup completo entre 2026-09-09T01:38:27Z e 01:48:27Z, com API, worker e ponte retomados. Contém 10.173 capturas (9.805 legadas e 368 fixtures), 9.978 lotes publicados, 1.370.635 linhas no Lake, 14.374.176 observações de campos e 226 capturas ainda pendentes preservadas. O [manifesto](../.data/gmgn-data/backups/acceptance-microbatch-20260909/manifest.json) registra hashes e imagem Docker exata; não contém as configurações privadas.
+
+O ID da imagem resolvido pelo Docker é sha256:302e912b8747f172c43374ac8124610032eb2ec43380fcad1a20013e71191c16. O valor ac61520d72a2a6f01e7972281a4fc5c85a823d0f94d2ebcc5f010930331e1f1d visto na saída do build é o digest da configuração. Não são duas versões diferentes do runtime. RestoreCheck usa o ID exato do manifesto.
+
+Restauração dessa versão concluída com prova complementar de reconciliação no projeto midas-data-restore-microbatch. O gate estrito original falhou ao rejeitar a entrega de oito lotes que já estavam pendentes no backup; correção automatizada segue em DB-08.3. Detalhes e resultado qualificado abaixo.
+## Restauração da versão atual — dados validados em 09/09/2026 UTC
+
+Resultado: restauração dos dados aprovada por comparação integral e reconciliação explícita de entregas pendentes. Relatório: [restore-check-20260909T1159358782366Z.json](../.data/gmgn-data/backups/acceptance-microbatch-20260909/restore-check-20260909T1159358782366Z.json). A aplicação e o script de backup não foram alterados nesta etapa.
+
+- Antes do rebuild: bancos, catálogo, sequências, snapshot 5931, raw e fatos exatamente iguais ao backup. Preservadas 10.173 capturas: 9.805 legacy_gmgn e 368 fixture; não são tokens distintos.
+- Rebuild: 9.978 lotes PostgreSQL disponíveis reconciliados e conferidos nos dois destinos. ClickHouse: 1.369.613 fatos físicos e 9.978 recibos.
+- Depois do rebuild: conteúdo operacional, raw, fontes e 226 capturas pendentes de normalização permaneceram iguais. As 14.374.176 observações de campos mantiveram contagem e fingerprint.
+- O dump original comprova oito lotes já publicados no PostgreSQL com entrega analítica pendente. O rebuild acrescentou exatamente 204 fatos e oito recibos ao Lake, atingindo 1.370.839 linhas e snapshot 5939. Os fatos acrescentados correspondem integralmente ao conteúdo desses lotes no PostgreSQL.
+- As 1.370.635 linhas originais continuam com o mesmo fingerprint no snapshot histórico 5931 e no estado atual excluídos somente os oito lotes novos. Zero linhas inesperadas, perdas, alterações ou duplicações nessa reconciliação.
+- Quatro fixtures diretas conservaram checksums, recibos, snapshot compartilhado e consulta histórica; continuam corretamente fora do ClickHouse reconstruído. O total global do Lake inclui fixtures sem normalization_run e não deve ser igualado automaticamente ao total do ClickHouse.
+- PostgreSQL, NATS e ClickHouse da réplica terminaram parados com exit 0 e sem OOM; todos os volumes foram preservados. PostgreSQL, API, worker e bridge da origem estavam saudáveis no fechamento; nenhum serviço da origem foi iniciado ou parado por este ensaio.
+
+O gate automático original falhou porque exige igualdade absoluta da contagem/hash do Lake após o rebuild. Essa condição rejeitou a reposição legítima dos 204 fatos. A falha permanece em restore-strict-gate-failure.json; não foi reclassificada como PASS do script. O resultado aprovado usa a prova complementar exata em restore-lake-reconciliation.json, cruzada com restore-original-delivery-pending.json, além das comparações integrais antes/depois e das amostras em restore-fixtures-before.json e restore-fixtures-after.json. Esse caso foi incorporado ao verificador em DB-08.3, descrito abaixo, mantendo a rejeição de crescimento sem prova.
+
+A validação retomada ocorreu entre 2026-09-09T11:19:04.0576329Z e 2026-09-09T11:59:35.7980684Z, duração 2431.74 segundos, incluindo a investigação dessa condição. Importação e cópia ocorreram na etapa anterior e têm registros próprios. Esta é uma prova local, sem estabelecer RTO, capacidade sustentada, retenção ou recuperação em outro host.
+
+
+## Correção DB-08.3 — verificador automático, 09/09/2026
+
+O RestoreCheck agora registra, antes do rebuild, quais lotes PostgreSQL já estavam publicados e ainda não tinham entrega analítica confirmada. O plano também preserva fingerprints dos recibos e dos metadados dos snapshots existentes. O helper do host é executado na imagem fixada no manifesto; nenhuma imagem, dependência, serviço de coleta ou estratégia foi alterada.
+
+Depois do rebuild, o verificador exige igualdade integral do conteúdo operacional e raw. No Lake, exige que todas as linhas originais permaneçam iguais tanto no snapshot histórico quanto no estado atual, que os recibos e metadados anteriores sejam preservados, e que cada acréscimo pertença ao conjunto previamente pendente. Os fatos novos devem corresponder exatamente ao PostgreSQL em conteúdo, horário, identidade e contagem física, com um recibo válido e vínculo exato entre batch_id, checksum e snapshot. Lotes vazios exigem recibo; uma entrega pendente que já existia no Lake mantém o snapshot anterior. Nenhum aumento arbitrário, perda, alteração ou duplicação é aceito.
+
+Validação: **40 casos locais passaram**, sem falhas ou skips: 26 contratos PowerShell e 14 regressões do reconciliador. Incluem o fluxo completo do RestoreCheck com substituições controladas, a ordem plano → rebuild → prova final e casos negativos de perda, duplicação, valor/horário alterado, metadados trocados e recibos incompletos.
+
+Na réplica real preservada, o planejador leu o estado atual; o verificador final passou no replay histórico dos oito lotes e 204 fatos, incluindo cinco lotes vazios. O plano histórico desse replay foi reconstruído a partir do dump original e do snapshot preservado; as comparações gerais pós-rebuild reutilizam a evidência integral registrada anteriormente. Não foi executado um novo backup, uma nova importação ou um novo rebuild completo. A réplica encerrou com exit 0 e volumes preservados.
+
+Evidências: [resultado final](../.data/gmgn-data/evidence/restore-gate-20260909/result-final.json), [prova de reconciliação](../.data/gmgn-data/evidence/restore-gate-20260909/restore-rebuild-reconciliation-final.json), [testes locais](../.data/gmgn-data/evidence/restore-gate-20260909/local-tests.json) e [encerramento](../.data/gmgn-data/evidence/restore-gate-20260909/cleanup.json). O relatório guarda os hashes do script e do helper usados.
+
+DB-08.3 está concluído. A falha anterior permanece como evidência histórica; não foi reescrita como uma execução bem-sucedida da versão antiga. Próximo trabalho: DB-06.7, uma comparação isolada do custo do catálogo antes de qualquer mudança de índice; depois DB-06.4, comprovação de recuperação do atraso.

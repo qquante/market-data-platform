@@ -62,8 +62,6 @@ def test_valid_dsn_and_configuration_binding_contains_origin_not_password():
     b = BridgeConfig("a",ORIGIN,"cluster2")
     c = BridgeConfig("a",ORIGIN+timedelta(seconds=1),"cluster1")
     assert len({a.fingerprint,b.fingerprint,c.fingerprint}) == 3
-    with pytest.raises(ValueError,match="budget"):
-        BridgeConfig("a",ORIGIN,"c",raw_budget=4*1024**2)
     with pytest.raises(ValueError,match="fixture"):
         BridgeConfig("production",ORIGIN,"c",source_kind="fixture")
 
@@ -105,6 +103,7 @@ def test_new_wallet_body_context_is_bounded_and_manual_import_behavior_is_unchan
     (0,{"page":{"accepted":30,"unavailable":5,"duplicate":15}},0.1),
     (0,{"page":{"accepted":49}},1.0),
     (0,{"pending":500},1.0),
+    (0,{"state":"paused"},5.0),
     (0,{"page":{}},1.0),
     (1,{"page":{"accepted":50}},3),
     (8,{},15),

@@ -30,10 +30,10 @@ def main():
 async def admin(settings,command,source_kind=None,limit=100):
     from .raw_store import RawStore
     from .store import Store
-    store=await Store(settings.database_dsn,RawStore(settings.raw_path,settings.max_capture_bytes)).open()
+    store=await Store(settings.database_dsn,RawStore(settings.raw_path,settings.max_capture_bytes,min_free_bytes=settings.raw_min_free_bytes,host_capacity_path=settings.raw_host_capacity_path)).open()
     try:
         if command=="healthcheck":
-            fresh=await store.pool.fetchval("SELECT EXISTS(SELECT 1 FROM worker_health WHERE worker_name='data-worker' AND state='ready' AND heartbeat_at>clock_timestamp()-interval '45 seconds')")
+            fresh=await store.pool.fetchval("SELECT EXISTS(SELECT 1 FROM worker_health WHERE worker_name='data-worker' AND (state='ready' OR details->>'liveness'='true' OR (state='paused' AND details->>'reason'='storage_backpressure')) AND heartbeat_at>clock_timestamp()-interval '45 seconds')")
             if not fresh:
                 raise SystemExit(1)
         elif command=="status":

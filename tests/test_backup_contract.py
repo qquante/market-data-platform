@@ -342,5 +342,109 @@ if (($script:versions -join ',') -ne '2,1') { throw 'Probe evidence versions not
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+
+    def reconciliation_setup(self):
+        return r"""
+$baseline='{"evidence_schema_version":2,"operational":{"facts":{"rows":3,"sha256":"op"}},"raw":{"objects":1},"source_counts":[],"ready_batches":2,"pending_captures":1,"lake_snapshot":[7,"2026-09-09T00:00:00Z",2],"lake_facts":{"rows":3,"sha256":"old"},"delivery_sha256":"before"}' | ConvertFrom-Json
+$after=$baseline | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$after.lake_facts.rows=4; $after.lake_facts.sha256='new'; $after.delivery_sha256='after'
+$plan='{"schema_version":1,"baseline_snapshot":7,"original_facts":{"rows":3,"sha256":"old"},"pending":[{"batch_id":"pending","fact_count":1}]}' | ConvertFrom-Json
+$proof='{"schema_version":1,"status":"passed","baseline_snapshot":7,"unexpected_rows_or_duplicates":0,"original_receipts_unchanged":true,"original_snapshots_unchanged":true,"historical_fingerprint":{"rows":3,"sha256":"old"},"preserved_original_fingerprint":{"rows":3,"sha256":"old"},"pending_batches_verified":1,"new_receipts":1,"added_rows":1,"current_lake_rows":4}' | ConvertFrom-Json
+"""
+    def test_post_rebuild_gate_accepts_exact_pending_growth(self):
+        result=self.ps(self.reconciliation_setup()+r"""
+$oldRejected=$false
+try { Assert-SameEvidence $baseline.lake_facts $after.lake_facts 'Legacy exact lake gate' } catch {$oldRejected=$true}
+if(-not $oldRejected){throw 'Regression fixture did not reproduce the former false rejection'}
+Assert-PostRebuildEvidence $baseline $after $plan $proof
+""")
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_post_rebuild_gate_rejects_incomplete_proof_or_changed_other_data(self):
+        cases=("missing","unverified","metadata","snapshot","historical","preserved","growth","current","pending","raw","operational")
+        for case in cases:
+            with self.subTest(case=case):
+                result=self.ps(self.reconciliation_setup()+r"""
+switch ('__CASE__') {
+'missing' {$proof=$null}
+'unverified' {$proof.status='failed'}
+'metadata' {$proof.original_snapshots_unchanged=$false}
+'snapshot' {$proof.baseline_snapshot=6}
+'historical' {$proof.historical_fingerprint.sha256='changed'}
+'preserved' {$proof.preserved_original_fingerprint.sha256='changed'}
+'growth' {$proof.added_rows=2}
+'current' {$proof.current_lake_rows=5}
+'pending' {$proof.pending_batches_verified=0}
+'raw' {$after.raw.objects=2}
+'operational' {$after.operational.facts.sha256='changed'}
+}
+Assert-PostRebuildEvidence $baseline $after $plan $proof
+""".replace("__CASE__",case))
+                self.assertNotEqual(result.returncode,0)
+
+    def test_reconciliation_cannot_target_source_and_mounts_inputs_read_only(self):
+        root=str(SCRIPT.parents[1]).replace("'","''")
+        result=self.ps(r"""
+$script:Workspace='__ROOT__'
+$script:BackupPath='C:\fixture backup'
+function Invoke-Compose([string]$Project,[string[]]$Arguments) {
+    if($Project -cne 'midas-data-restore-test'){throw 'Wrong project'}
+    $v=[array]::IndexOf($Arguments,'--volume')
+    if($v -lt 0 -or $Arguments[$v+1] -cne 'C:\fixture backup:/restore-input:ro'){throw 'Input mount not read-only'}
+    if($Arguments[-1] -cne 'plan' -or '--no-deps' -cnotin $Arguments){throw 'Unsafe invocation'}
+    return 'MIDAS_RESTORE_RECONCILIATION={"schema_version":1}'
+}
+$rejected=$false
+try {$null=Get-RebuildReconciliation 'midas-data' -Phase plan} catch {$rejected=$true}
+if(-not $rejected){throw 'Source target accepted'}
+$null=Get-RebuildReconciliation 'midas-data-restore-test' -Phase plan
+""".replace("__ROOT__",root))
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_restore_workflow_captures_plan_before_rebuild_and_requires_final_proof(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target=str(Path(temp)).replace("'","''")
+            root=str(SCRIPT.parents[1]).replace("'","''")
+            body=self.reconciliation_setup()+r"""
+$script:Workspace='__ROOT__'
+$script:BackupPath='__TARGET__'
+Write-Json (Join-Path $script:BackupPath 'baseline.json') $baseline
+$script:steps=[Collections.Generic.List[string]]::new()
+$script:probes=0
+function Read-BackupManifest { return @{config_sha256=@{};images=@{worker='image';postgres='image';nats='image';clickhouse='image'}} }
+function Get-ConfigDigests { return @{} }
+function Assert-FreshRestore {}
+function Wait-Healthy {}
+function Get-ProjectVolumes { return @{} }
+function Get-ContainerId { return 'fixture-container' }
+function Invoke-Docker { return 'image' }
+function Invoke-Archive {}
+function Get-Evidence {
+    $script:probes++
+    if($script:probes -eq 1){$script:steps.Add('before');return $baseline}
+    $script:steps.Add('after');return $after
+}
+function Get-RebuildReconciliation([string]$Project,[string]$Phase) {
+    $script:steps.Add($Phase)
+    if($Phase -eq 'plan'){return $plan}
+    return $proof
+}
+function Invoke-Compose([string]$Project,[string[]]$Arguments) {
+    if($Project -cne 'midas-data-restore'){throw 'Wrong target'}
+    if('rebuild-analytics' -cin $Arguments) {
+        if(-not (Test-Path (Join-Path $script:BackupPath 'restore-rebuild-plan.json'))){throw 'Plan not saved before rebuild'}
+        $script:steps.Add('rebuild')
+        return '{"reconciled_batches":2}'
+    }
+    return @()
+}
+Invoke-RestoreCheck
+if(($script:steps -join ',') -cne 'before,plan,rebuild,after,verify'){throw 'Incorrect verification sequence'}
+$report=Get-Content (Get-ChildItem $script:BackupPath -Filter 'restore-check-*.json').FullName -Raw | ConvertFrom-Json
+if($report.status -cne 'passed' -or $report.reconciliation.added_rows -ne 1){throw 'Reconciliation not required by full workflow'}
+"""
+            result=self.ps(body.replace("__ROOT__",root).replace("__TARGET__",target))
+            self.assertEqual(result.returncode,0,result.stderr)
+
 if __name__ == "__main__":
     unittest.main()

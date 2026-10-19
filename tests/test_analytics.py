@@ -675,7 +675,7 @@ class GroupBoundaryTests(unittest.TestCase):
         self.assertEqual(batch_size([dict(a, occurred_at="2026-09-08T09:00:00.123456-03:00")]),
                          len(_json(_row(a)).encode("utf-8")))
         self.assertEqual(batch_size([]), 0)
-        for batches in ([], [("b" + str(i), []) for i in range(9)], [["b", []]]):
+        for batches in ([], [("b" + str(i), []) for i in range(33)], [["b", []]]):
             with self.assertRaises(ValueError):
                 _prepare_batches(batches)
         with self.assertRaises(BatchConflict):
@@ -684,7 +684,7 @@ class GroupBoundaryTests(unittest.TestCase):
             _prepare_batches([("a", [a]), ("b", [dict(a, value_text="different")])])
         prepared = _prepare_batches([("a", [a]), ("b", [a])])
         self.assertEqual(sum(len(rows) for rows, _ in prepared.values()), 2)
-        with patch("midas_data.analytics.MAX_BATCH_ROWS", 1):
+        with patch("midas_data.analytics.MAX_GROUP_ROWS", 1):
             with self.assertRaises(ValueError):
                 _prepare_batches([("a", [a]), ("b", [a])])
         with patch("midas_data.analytics.MAX_BATCH_BYTES", batch_size([a])):
@@ -697,34 +697,22 @@ class GroupBoundaryTests(unittest.TestCase):
                 sink.apply_batches([("a", [a]), ("b", [dict(a, unit="different")])])
             access.assert_not_called()
 
-    def test_clickhouse_ten_thousand_ids_use_one_bounded_typed_parameter(self):
-        from midas_data.analytics import _json
+    def test_ten_thousand_identities_are_all_checked_with_bounded_read_sets(self):
         rows = [fact() for _ in range(10_000)]
-        requests = []
-
+        observed=[]
         def response(request):
-            requests.append(request)
-            self.assertLess(len(str(request.url).encode()), 1024 * 1024)
-            self.assertNotIn("param_ids", request.url.params)
-            self.assertIn("multipart/form-data", request.headers["content-type"])
-            from email.parser import BytesParser
-            from email.policy import default
-            parsed = BytesParser(policy=default).parsebytes(
-                ("Content-Type: " + request.headers["content-type"] + "\r\n\r\n").encode() + request.read()
-            )
-            fields = {part.get_param("name", header="content-disposition"): part.get_payload(decode=True)
-                      for part in parsed.iter_parts()}
-            self.assertEqual(sum(len(__import__("json").loads(value)) for value in fields.values()), 10_000)
-            self.assertEqual(len(fields), 20)
-            self.assertTrue(all(len(value) < 32 * 1024 for value in fields.values()))
-            self.assertIn("arrayConcat(JSONExtract({ids0:String}", request.url.params["query"])
-            return httpx.Response(200, json={"data": []})
-        sink = AnalyticsSinks("fixture", "/fixture", "http://invalid", "fixture", "fixture")
+            ids=[v for k,v in request.url.params.multi_items() if k.startswith("param_id")]
+            self.assertLessEqual(len(ids),256)
+            self.assertLess(len(str(request.url).encode()),32768)
+            self.assertEqual(request.url.params["max_bytes_to_read"],str(128*1024**2))
+            observed.extend(ids)
+            return httpx.Response(200,json={"data":[]})
+        sink=AnalyticsSinks("fixture","/fixture","http://invalid","fixture","fixture")
         sink._http.close()
-        sink._http = httpx.Client(base_url="http://invalid", transport=httpx.MockTransport(response))
+        sink._http=httpx.Client(base_url="http://invalid",transport=httpx.MockTransport(response))
         self.addCleanup(sink.close)
-        sink._check_group_identities(rows, lake=False)
-        self.assertEqual(len(requests), 1)
+        sink._check_group_identities(rows,lake=False)
+        self.assertEqual(sorted(observed),sorted(r["fact_id"] for r in rows))
 
     def test_bulk_receipts_detect_duplicate_content_conflict(self):
         _, summary = _prepare([fact()])
@@ -816,7 +804,7 @@ class GroupLakeSqlTests(unittest.TestCase):
         facts, receipts, writes = [], [], []
         fail = [True]
 
-        def ch(query, *, params=None, data=None, result=False, param_body=False):
+        def ch(query, *, params=None, data=None, result=False, param_body=False, max_rows=10000):
             if query.startswith("INSERT"):
                 writes.append(query)
                 target = receipts if "batch_receipts_log" in query else facts
@@ -829,7 +817,7 @@ class GroupLakeSqlTests(unittest.TestCase):
                 ids = json.loads(params["batches"])
                 return copy.deepcopy([r for r in receipts if r["batch_id"] in ids])
             if query.startswith("SELECT source_kind"):
-                ids = [item for value in params.values() for item in json.loads(value)]
+                ids = list(params.values())
                 tuples = {(r["source_kind"], r["fact_id"], r["row_hash"]) for r in facts if r["fact_id"] in ids}
                 return [dict(zip(("source_kind", "fact_id", "row_hash"), r)) for r in tuples]
             ids = json.loads(params["batches"])

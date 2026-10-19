@@ -1,4 +1,4 @@
-"""Bounded, deterministic adapters for GMGN token_info and market_rank only.
+"""Bounded, deterministic adapters for GMGN token observations.
 
 No I/O, current clock, float conversion, inferred units, derived market cap or
 recursive token discovery is used here. Original bytes belong to Evidence Store.
@@ -16,7 +16,11 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from .contracts import (CaptureMetadata, Fact, FieldObservation, Issue, NormalizationResult,
                         MAX_POINTER_BYTES, MAX_TOKEN_ADDRESS_BYTES)
 
-NORMALIZER_VERSION = 'gmgn-p0-v3'
+NORMALIZER_VERSION = 'gmgn-p0-v4'
+CONTRACT_VERSIONS = {'token_info': 'v3', 'market_rank': 'v4', 'trenches': 'v1'}
+TRENCH_GROUPS = ('new_creation', 'pump', 'near_completion', 'completed')
+MAX_TRENCH_JSON_NODES = 40_000  # Observed 3x60-token bodies exceed 20k; supports 3x80 within output/fact budgets.
+WINDOWS = frozenset({'1m', '5m', '1h', '6h', '24h'})
 MAX_RAW_BYTES = 8 * 1024 * 1024
 MAX_JSON_NODES = 20_000  # Includes root, containers and leaves; no silent truncation.
 MAX_JSON_DEPTH = 32  # Root depth is zero.
@@ -25,7 +29,7 @@ MAX_OUTPUT_BYTES = 16 * 1024 * 1024  # Compact UTF-8 JSON of {facts: [...], fiel
 FATAL_ISSUE_CODES = frozenset({
     'payload_too_large', 'invalid_utf8', 'invalid_unicode', 'invalid_json', 'duplicate_json_key',
     'non_finite_json_number', 'json_structure_limit', 'http_error',
-    'provider_error', 'identity_conflict', 'missing_token_identity',
+    'provider_error', 'identity_conflict', 'missing_token_identity', 'candle_contract_error',
     'fact_count_limit', 'output_size_limit', 'pointer_size_limit', 'token_identity_limit',
 })
 UNSUPPORTED_ISSUE_CODES = frozenset({'unsupported_endpoint', 'unsupported_shape'})
@@ -50,12 +54,71 @@ class _Spec:
     supported_chains: frozenset[str] | None = None
 
 
-def _specs(endpoint: str) -> dict[tuple[str, ...], _Spec]:
+def _trench_specs() -> dict[tuple[str, ...], _Spec]:
+    """Exact Trenches paths; never inherit ranking aliases or units."""
+    specs = {}
+    for name in ('name', 'symbol', 'launchpad_platform', 'exchange'):
+        specs[(name,)] = _Spec(name, 'string', 'identity' if name in {'name', 'symbol'} else 'launch',
+                              quality='valid', reason='provider_untrusted_metadata_text')
+    specs[('usd_market_cap',)] = _Spec('usd_market_cap', 'decimal', 'valuation', 'usd', 'valid',
+        nonnegative=True, reason='provider_reported_usd_cap_supply_basis_unspecified')
+    # Observed market_cap is not silently aliased to the documented usd_market_cap.
+    specs[('market_cap',)] = _Spec('market_cap', 'decimal', 'valuation', nonnegative=True,
+        reason='trenches_market_cap_alias_currency_supply_basis_unverified')
+    specs[('price',)] = _Spec('price', 'decimal', 'valuation', positive=True,
+        reason='trenches_exact_price_path_currency_unverified')
+    specs[('liquidity',)] = _Spec('liquidity', 'decimal', 'liquidity', 'usd', nonnegative=True,
+        reason='trenches_liquidity_pool_vs_aggregate_scope_unverified')
+    specs[('total_supply',)] = _Spec('total_supply', 'decimal', 'supply', nonnegative=True,
+        reason='human_vs_atomic_supply_scale_unverified')
+    specs[('decimals',)] = _Spec('decimals', 'integer', 'supply', nonnegative=True,
+        reason='trenches_exact_decimals_path_contract_unverified')
+    for name in ('created_timestamp', 'open_timestamp', 'complete_timestamp'):
+        specs[(name,)] = _Spec(name, 'integer', 'temporal', 'unix_second', 'valid', positive=True,
+            reason='provider_event_attribute_unix_seconds')
+    specs[('complete_cost_time',)] = _Spec('complete_cost_time', 'integer', 'temporal', 'second', 'valid',
+        nonnegative=True, reason='provider_creation_to_completion_duration')
+    for name in ('holder_count', 'smart_degen_count', 'renowned_count', 'sniper_count'):
+        specs[(name,)] = _Spec(name, 'integer', 'holders', 'count', 'valid', nonnegative=True,
+            reason='provider_holder_count_not_independent_wallet_verification')
+    for name in ('swaps_1m', 'swaps_1h', 'swaps_24h', 'buys_24h', 'sells_24h'):
+        specs[(name,)] = _Spec(name, 'integer', 'flow', 'count', 'valid', nonnegative=True,
+            reason='provider_transaction_count_named_window')
+    for name in ('volume_1h', 'volume_24h', 'net_buy_24h'):
+        specs[(name,)] = _Spec(name, 'decimal', 'flow', 'usd', 'valid', nonnegative=name != 'net_buy_24h',
+            reason='provider_volume_named_window_no_cross_window_sum')
+    for name in ('twitter', 'telegram', 'website', 'instagram', 'tiktok'):
+        specs[(name,)] = _Spec(name, 'string', 'social', quality='valid',
+            reason='provider_untrusted_link_not_verified_post_or_affiliation')
+    specs[('x_user_follower',)] = _Spec('x_user_follower', 'integer', 'social', 'count', 'valid',
+        nonnegative=True, reason='provider_profile_follower_count_not_post_content')
+    return specs
+
+
+def _rank_window(params: dict[str, Any]) -> tuple[str | None, str]:
+    values = [params['interval']] if 'interval' in params else []
+    query = params.get('query')
+    if query is not None and not isinstance(query, dict):
+        return None, 'ranking_query_parameters_invalid'
+    if isinstance(query, dict) and 'interval' in query:
+        values.append(query['interval'])
+    if not values:
+        return None, 'queried_window_not_encoded_in_fact'
+    if any(not isinstance(v, str) or v not in WINDOWS for v in values):
+        return None, 'ranking_window_unsupported_or_invalid'
+    if len(set(values)) != 1:
+        return None, 'ranking_window_conflicts_between_parameter_locations'
+    return values[0], 'provider_requested_window_end_not_measured'
+
+
+def _specs(endpoint: str, params: dict[str, Any] | None = None) -> dict[tuple[str, ...], _Spec]:
     """Exact provider paths; documented contracts are endpoint-specific.
 
     FIELD_CONTRACTS.md and contracts/gmgn-p0-v3.json record the evidence and
     limitations. Valid is a provider-field contract, never an on-chain verdict.
     """
+    if endpoint == 'trenches':
+        return _trench_specs()
     specs: dict[tuple[str, ...], _Spec] = {}
     for name in ('name', 'symbol'):
         specs[(name,)] = _Spec(name, 'string', 'identity', quality='valid')
@@ -170,6 +233,12 @@ def _specs(endpoint: str) -> dict[tuple[str, ...], _Spec]:
         for name in ('is_wash_trading', 'creator_close'):
             specs[(name,)] = _Spec(name, 'boolean', 'risk', quality='valid',
                                   reason='provider_boolean_flag_not_independent_security_verdict')
+    if endpoint == 'market_rank':
+        window, reason = _rank_window(params or {})
+        for name in ('volume', 'swaps', 'buys', 'sells'):
+            spec = specs[(name,)]
+            specs[(name,)] = replace(spec, metric=f'{name}_{window}' if window else name,
+                                    quality='valid' if window else 'unverified', reason=reason)
     return specs
 
 
@@ -245,7 +314,8 @@ def _replace_field(observations: dict[str, FieldObservation], budget: _OutputBud
     observations[record.pointer] = record
 
 
-def _nodes(root: Any) -> list[tuple[str, Any]]:
+def _nodes(root: Any, *, max_nodes: int | None = None) -> list[tuple[str, Any]]:
+    node_limit = MAX_JSON_NODES if max_nodes is None else max_nodes
     stack = [('', root, 0)]
     nodes = []
     pointer_bytes = 0
@@ -260,7 +330,7 @@ def _nodes(root: Any) -> list[tuple[str, Any]]:
 
     while stack:
         pointer, value, depth = stack.pop()
-        if depth > MAX_JSON_DEPTH or len(nodes) >= MAX_JSON_NODES:
+        if depth > MAX_JSON_DEPTH or len(nodes) >= node_limit:
             raise _PayloadError('json_structure_limit', 'JSON node or depth limit exceeded; nothing was partially catalogued.')
         if '\x00' in pointer or isinstance(value, str) and '\x00' in value:
             raise _PayloadError('invalid_unicode', 'JSON text contains NUL, unsupported by the storage text contract.')
@@ -271,7 +341,7 @@ def _nodes(root: Any) -> list[tuple[str, Any]]:
         except UnicodeEncodeError:
             raise _PayloadError('invalid_unicode', 'JSON contains an unpaired Unicode surrogate.') from None
         nodes.append((pointer, value))
-        if isinstance(value, (dict, list)) and len(nodes) + len(stack) + len(value) > MAX_JSON_NODES:
+        if isinstance(value, (dict, list)) and len(nodes) + len(stack) + len(value) > node_limit:
             raise _PayloadError('json_structure_limit', 'JSON node limit exceeded; nothing was partially catalogued.')
         if isinstance(value, dict):
             for key, child in reversed(list(value.items())):
@@ -401,6 +471,25 @@ def _entities(root: Any, endpoint: str) -> tuple[list[tuple[str, dict[str, Any]]
         return [], [_issue('provider_error', _pointer(base, 'code'), 'Inner provider status is not the supported integer success code 0.')]
     if endpoint == 'token_info' and isinstance(data, dict):
         return [(base, data)], []
+    if endpoint == 'trenches' and isinstance(data, dict):
+        if not any(group in data for group in TRENCH_GROUPS) or any(
+            key in data for key in ('address', 'rank', 'data')
+        ) or ('pump' in data and 'near_completion' in data):
+            return [], [_issue('unsupported_shape', base, 'Trenches requires category arrays and only one of pump/near_completion.')]
+        entities, issues = [], []
+        for group in TRENCH_GROUPS:
+            if group not in data:
+                continue  # Omitted category is not an observed empty category.
+            group_base = _pointer(base, group)
+            if not isinstance(data[group], list):
+                return [], [_issue('unsupported_shape', group_base, 'Trenches category is not an array.')]
+            for index, item in enumerate(data[group]):
+                pointer = _pointer(group_base, index)
+                if isinstance(item, dict):
+                    entities.append((pointer, item))
+                else:
+                    issues.append(_issue('invalid_token_item', pointer, 'Trenches item is not a token object.'))
+        return entities, issues
     if endpoint == 'market_rank':
         if isinstance(data, dict) and ('code' in data or 'data' in data):
             # Only the observed second HTTP envelope is supported. Do not
@@ -453,7 +542,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
             raise
         except (ValueError, InvalidOperation, RecursionError):
             raise _PayloadError('invalid_json', 'Response cannot be parsed as bounded, exact JSON.') from None
-        nodes = _nodes(root)
+        nodes = _nodes(root, max_nodes=MAX_TRENCH_JSON_NODES if metadata.endpoint == 'trenches' else None)
     except _PayloadError as exc:
         result.issues.append(_issue(exc.code, '', exc.detail))
         return result
@@ -473,7 +562,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
     if isinstance(root, dict) and 'code' in root and (type(root['code']) is not int or root['code'] != 0):
         result.issues.append(_issue('provider_error', '/code', 'Provider status is not the supported integer success code 0.'))
         return result
-    if metadata.endpoint not in {'token_info', 'market_rank'}:
+    if metadata.endpoint not in CONTRACT_VERSIONS:
         result.issues.append(_issue('unsupported_endpoint', '', 'No adapter is registered for this endpoint.'))
         return result
 
@@ -485,10 +574,15 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
     if isinstance(root, dict) and 'data' in root and 'chain' in root:
         if not isinstance(root['chain'], str) or root['chain'].casefold() != chain:
             result.issues.append(_issue('identity_conflict', '/chain', 'Envelope chain conflicts with capture metadata.'))
-    elif metadata.endpoint == 'market_rank' and isinstance(root, dict) and 'chain' in root:
+    elif metadata.endpoint in {'market_rank', 'trenches'} and isinstance(root, dict) and 'chain' in root:
         if not isinstance(root['chain'], str) or root['chain'].casefold() != chain:
             result.issues.append(_issue('identity_conflict', '/chain', 'Ranking chain conflicts with capture metadata.'))
-    specs = _specs(metadata.endpoint)
+    if metadata.endpoint == 'trenches' and isinstance(root, dict) and isinstance(root.get('data'), dict):
+        envelope_chain = root['data'].get('chain', chain)
+        if not isinstance(envelope_chain, str) or envelope_chain.casefold() != chain:
+            result.issues.append(_issue('identity_conflict', '/data/chain', 'Trenches chain conflicts with capture metadata.'))
+    specs = _specs(metadata.endpoint, metadata.request_params)
+    contract = f'gmgn.{metadata.endpoint}.{CONTRACT_VERSIONS[metadata.endpoint]}'
     node_values = dict(nodes)
     for base, item in entities:
         address = _address(item.get('address'), chain)
@@ -509,7 +603,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
                 valid_identity = address is not None if key == 'address' else isinstance(item[key], str) and item[key].casefold() == chain
                 _replace_field(observations, budget, FieldObservation(pointer=pointer, category='identity', value_type=_json_type(item[key]),
                     quality='valid' if valid_identity else 'invalid', reason='identity_role_checked' if valid_identity else 'invalid_identity',
-                    contract_id=f'gmgn.{metadata.endpoint}.v3:{key}'))
+                    contract_id=f'{contract}:{key}'))
         for path, spec in specs.items():
             pointer = base
             for component in path:
@@ -521,7 +615,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
             if quality == 'valid' and spec.supported_chains is not None and chain not in spec.supported_chains:
                 quality, reason = 'unverified', 'field_chain_applicability_unverified'
             _replace_field(observations, budget, FieldObservation(pointer=pointer, category=spec.category, value_type=_json_type(value),
-                quality=quality, reason=reason, contract_id=f'gmgn.{metadata.endpoint}.v3:{".".join(path)}'))
+                quality=quality, reason=reason, contract_id=f'{contract}:{".".join(path)}'))
             if quality == 'invalid':
                 result.issues.append(_issue('invalid_field', pointer, f'Value does not satisfy the {spec.value_type} field contract: {reason}.'))
             if address is None:
@@ -533,7 +627,7 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
                 value_type=spec.value_type, unit=spec.unit, category=spec.category,
                 occurred_at=metadata.source_event_at if metadata.source_event_at is not None else metadata.received_at,
                 time_basis='source' if metadata.source_event_at is not None else 'received',
-                pointer=pointer, quality=quality, contract_version=f'gmgn.{metadata.endpoint}.v3')
+                pointer=pointer, quality=quality, contract_version=contract)
             budget.add_fact(fact)
             result.facts.append(fact)
     result.fields[:] = list(observations.values())
@@ -543,14 +637,21 @@ def _normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationRe
 
 
 def normalize_capture(metadata: CaptureMetadata, raw: bytes) -> NormalizationResult:
-    """Return bounded v3 output, or one explicit fatal issue without partial rows.
+    """Return bounded versioned output, or one explicit fatal issue without partial rows.
 
     Limits: 10,000 facts; 16 MiB compact UTF-8 JSON for facts+fields; 2,048 bytes
     per pointer; 256 bytes per token identity. Raw evidence is retained by the
     caller, including when a capture cannot fit this downstream batch contract.
     """
+    version = NORMALIZER_VERSION
+    if isinstance(metadata, CaptureMetadata) and metadata.endpoint == 'token_kline':
+        from .candle_normalization import normalize_candle_capture, VERSION
+        version = VERSION
     try:
-        return _normalize_capture(metadata, raw)
+        result = _normalize_capture(metadata, raw)
+        if version != NORMALIZER_VERSION:
+            return normalize_candle_capture(metadata, raw, result)
+        return result
     except _PayloadError as exc:
-        return NormalizationResult(normalizer_version=NORMALIZER_VERSION,
+        return NormalizationResult(normalizer_version=version,
                                    issues=[_issue(exc.code, '', exc.detail)])

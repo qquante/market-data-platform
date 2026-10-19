@@ -21,7 +21,7 @@ where = ["."]
 include = ["midas_data*"]
 
 [tool.setuptools.package-data]
-midas_data = ["migrations/*.sql"]
+midas_data = ["migrations/*.sql", "ui/*.html", "ui/*.js", "ui/*.css", "strategy_sources/*.json", "field_contracts/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

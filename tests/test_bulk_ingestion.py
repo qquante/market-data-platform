@@ -223,7 +223,7 @@ async def _copy_atomicity():
             # The surrounding transaction must also remove the inserted run and
             # any field observations, while leaving the accepted raw untouched.
             capture_id = UUID(meta["capture_id"])
-            for table in ("normalization_runs", "facts", "field_observations"):
+            for table in ("normalization_runs", "facts", "field_observations", "field_catalog_batches"):
                 count = await store.pool.fetchval(
                     f"SELECT count(*) FROM {table} WHERE capture_id=$1 AND normalizer_version=$2",
                     capture_id, custom_version,

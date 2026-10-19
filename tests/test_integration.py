@@ -187,7 +187,7 @@ def test_lossless_raw_precision_clocks_and_analytic_receipts(client):
     # exercise the transport and parser, not merely Pydantic construction.
     raw = (
         '{\n  "data": {"address": "' + token + '", "price": {"price": '
-        + exact + '}, "qa_text": "ação 🚀", "qa_exponent": 1e-40}\n}\n'
+        + exact + '}, "qa_text": "aÃ§Ã£o ðŸš€", "qa_exponent": 1e-40}\n}\n'
     ).encode("utf-8")
     reply = accepted(client, meta, raw)
     assert reply["duplicate"] is False
@@ -555,3 +555,145 @@ def test_database_clock_cutoff_and_original_evm_case_resolve_the_same_fact(clien
     assert canonical[0]["token_address"] == canonical_token
     observed = observations(client, original_token, cutoff=parsed, chain="BASE")["items"]
     assert [row["fact_id"] for row in observed] == [canonical[0]["fact_id"]]
+
+
+
+def test_trenches_and_ranking_windows_survive_full_pipeline(client):
+    token = token_address()
+    exact = '50000.123456789012345678901234567890'
+    received = now() - timedelta(seconds=30)
+    meta = metadata(token, endpoint='trenches', received_at=received, request_params={'chain': 'base'})
+    raw = json.dumps({'code': 0, 'data': {'new_creation': [], 'near_completion': [{
+        'address': token, 'chain': 'base', 'market_cap': exact, 'usd_market_cap': exact,
+        'holder_count': 5, 'volume_24h': '80.0100', 'created_timestamp': 1788900000,
+        'twitter': 'https://x.com/fixture/status/123'}], 'completed': []}}).encode()
+    accepted(client, meta, raw)
+    saved = wait_capture(client, meta['capture_id'], analytics=True)
+    assert saved['runs'][0]['analytics_receipt']['ok'] is True
+    assert post(client, meta, raw).json()['duplicate'] is True
+    assert client.get(f"/v1/captures/{meta['capture_id']}/raw").content == raw
+    cap = observations(client, token, metric='usd_market_cap')['items']
+    assert len(cap) == 1 and cap[0]['value_text'] == exact
+    assert cap[0]['pointer'] == '/data/near_completion/0/usd_market_cap'
+    assert cap[0]['contract_version'] == 'gmgn.trenches.v1'
+    assert instant(cap[0]['occurred_at']) == received
+    assert observations(client, token, metric='market_cap')['items'] == []
+    pending = observations(client, token, metric='market_cap', include_unverified='true')['items']
+    assert len(pending) == 1 and pending[0]['unit'] is None and pending[0]['value_text'] == exact
+    assert all(row['metric'] != 'created_timestamp' or instant(row['occurred_at']) == received
+               for row in as_known(client, token, now(), now()))
+    for window, value in [('1m', '3.001'), ('24h', '70.009')]:
+        rank_meta = metadata(token, endpoint='market_rank', request_params={'interval': window})
+        rank_raw = json.dumps({'data': {'rank': [{'address': token, 'volume': value}]}}).encode()
+        accepted(client, rank_meta, rank_raw)
+        wait_capture(client, rank_meta['capture_id'], analytics=True)
+        rows = observations(client, token, metric=f'volume_{window}')['items']
+        ranked = [r for r in rows if r['contract_version'] == 'gmgn.market_rank.v4']
+        assert len(ranked) == 1 and ranked[0]['value_text'] == value
+    assert observations(client, token, metric='volume')['items'] == []
+
+
+def test_trending_valuation_keeps_context_and_ignores_unverified_trenches(client):
+    """Trending USD observations must survive a newer, unverified Trenches quote."""
+    token = token_address()
+    received = now() - timedelta(seconds=30)
+    price = '0.000123456789012345678901234567890'
+    cap = '150000.123456789012345678901234567890'
+    highest = '500000.987654321098765432109876543210'
+    params = {'chain': 'base', 'interval': '5m', 'order_by': 'volume',
+              'direction': 'desc', 'limit': 20, 'filters': ['verified']}
+    meta = metadata(token, endpoint='market_rank', received_at=received, request_params=params)
+    raw = json.dumps({'data': {'rank': [{'address': token, 'price': price,
+        'market_cap': cap, 'history_highest_market_cap': highest, 'volume': '12.3400',
+        'rank': 3, 'hot_level': 7}]}}).encode()
+    accepted(client, meta, raw)
+    saved = wait_capture(client, meta['capture_id'], analytics=True)
+    assert saved['endpoint'] == 'market_rank'
+    assert saved['metadata']['request_params'] == params
+    assert client.get(f"/v1/captures/{meta['capture_id']}/raw").content == raw
+    assert post(client, meta, raw).json()['duplicate'] is True
+    for metric, value, unit in [('price', price, 'usd_per_token'), ('market_cap', cap, 'usd'),
+                                ('history_highest_market_cap', highest, 'usd')]:
+        rows = observations(client, token, metric=metric)['items']
+        assert len(rows) == 1
+        row = rows[0]
+        assert (row['value_text'], row['unit'], row['quality']) == (value, unit, 'valid')
+        assert row['contract_version'] == 'gmgn.market_rank.v4'
+        assert row['pointer'] == f'/data/rank/0/{metric}'
+        assert instant(row['occurred_at']) == received
+    assert observations(client, token, metric='volume_5m')['items'][0]['value_text'] == '12.3400'
+
+    later = metadata(token, endpoint='trenches', received_at=received + timedelta(seconds=10),
+                     request_params={'chain': 'base'})
+    trench_raw = json.dumps({'data': {'completed': [{'address': token,
+        'price': '999', 'market_cap': '9000000'}]}}).encode()
+    accepted(client, later, trench_raw)
+    wait_capture(client, later['capture_id'], analytics=True)
+    for metric, value in [('price', price), ('market_cap', cap)]:
+        rows = observations(client, token, metric=metric)['items']
+        assert len(rows) == 1 and rows[0]['value_text'] == value
+        all_rows = observations(client, token, metric=metric, include_unverified='true')['items']
+        assert {row['contract_version']: row['quality'] for row in all_rows} == {
+            'gmgn.market_rank.v4': 'valid', 'gmgn.trenches.v1': 'unverified'}
+    known = {row['metric']: row for row in as_known(client, token, now(), now())}
+    assert known['price']['value_text'] == price
+    assert known['market_cap']['value_text'] == cap
+    assert known['market_cap']['capture_id'] == meta['capture_id']
+
+
+def test_observation_context_preserves_source_rank_filters_and_knowledge_boundary(client):
+    token=token_address()
+    received=now()-timedelta(seconds=25)
+    params={'query':{'interval':'5m','order_by':'volume','direction':'desc','limit':20,
+                     'filters':['verified'],'min_marketcap':20000}}
+    meta=metadata(token, endpoint='market_rank',received_at=received,request_params=params)
+    raw=json.dumps({'data':{'rank':[{'address':token,'price':'0.123456789012345678901',
+                                    'market_cap':'25000.00000001','rank':12}]}}).encode()
+    before=now()
+    accepted(client,meta,raw)
+    wait_capture(client,meta['capture_id'],analytics=True)
+    fact=observations(client,token)['items'][0]
+    route=f"/v1/observations/{fact['fact_id']}/context"
+    query={'source_kind':'fixture','knowledge_cutoff':iso(now())}
+    reply=client.get(route,params=query)
+    assert reply.status_code==200,reply.text
+    result=reply.json(); context=result['context']
+    assert result['observation']==fact
+    assert context['source']['endpoint']=='market_rank'
+    assert context['source']['raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert context['request']['parameters']==params
+    assert context['request']['window']['value']=='5m'
+    assert context['entity']['reported_rank']['value_text']=='12'
+    assert context['entity']['response_position']==1
+    assert instant(context['clocks']['received_at'])==received
+    assert client.get(route,params={**query,'knowledge_cutoff':iso(before)}).status_code==404
+    assert client.get(route,params={**query,'source_kind':'gmgn'}).status_code==404
+    assert client.get(route,params={**query,'knowledge_cutoff':iso(now()+timedelta(minutes=1))}).status_code==422
+    assert client.get(route,params={**query,'knowledge_cutoff':'2026-09-09T10:00:00'}).status_code==422
+    assert client.get(route,params={'knowledge_cutoff':iso(now())}).status_code==422
+    assert client.get(route,params=query,headers={'authorization':'Bearer wrong'}).status_code==401
+
+    trench_meta=metadata(token,endpoint='trenches',request_params={'query':{'chain':'base'},
+        'body':{'near_completion':{'filters':['onchain'],'limit':60}}})
+    trench_raw=json.dumps({'data':{'pump':[{'address':token,'usd_market_cap':'30000',
+        'created_timestamp':1788979500,'open_timestamp':0,'complete_timestamp':0,
+        'complete_cost_time':-1788979500}]}}).encode()
+    accepted(client,trench_meta,trench_raw)
+    wait_capture(client,trench_meta['capture_id'],analytics=True)
+    trench=observations(client,token,metric='usd_market_cap')['items'][0]
+    reply=client.get(f"/v1/observations/{trench['fact_id']}/context",
+                     params={'source_kind':'fixture','knowledge_cutoff':iso(now())})
+    assert reply.status_code==200,reply.text
+    context=reply.json()['context']
+    assert context['context_version']=='gmgn-observation-context-v2'
+    assert context['response']['list_item_count']==1
+    assert context['response']['requested_limit_comparison']=='within_requested'
+    assert context['temporal_attributes']['open_timestamp']['state']=='zero_unusable'
+    assert context['temporal_attributes']['complete_cost_time']['state']=='negative_invalid'
+    assert context['temporal_attributes']['complete_cost_time']['value_text']=='-1788979500'
+    assert context['clocks']['source_event_at'] is None
+    assert context['entity']['response_category']=='pump'
+    assert context['entity']['lifecycle_stage']=='near_completion'
+    assert context['entity']['reported_rank']['state']=='not_applicable'
+    assert context['request']['filter_parameters']==[{
+        'pointer':'/request_params/body/near_completion','parameters':{'filters':['onchain']}}]

@@ -1,5 +1,7 @@
 # Coleta contínua GMGN — operação e contrato
 
+> Estado atual: a origem ativa é o [coletor direto](DIRECT_COLLECTOR.md), independente do legado. Este documento descreve a ponte histórica; ela permanece desligada.
+
 Continuação autorizada S-DB-20260908-02. A ponte usa as respostas que o coletor existente já armazenou. Não faz requests GMGN, não abre uma conexão por token/estratégia e não executa operações financeiras.
 
 ## Fluxo implantado
@@ -108,11 +110,9 @@ Falha HTTP, 409, desconexão ou ACK incerto interrompem a página sem promover o
 
 Limites atuais: 4 MiB descompactados por resposta; 4 MiB + 64 KiB comprimidos; metadata de origem até 32 KiB antes de projeção; 50 chamadas por página; SQL na origem com statement_timeout de 5 s, lock_timeout de 1 s, work_mem de 4 MiB e uma conexão da ponte.
 
-A sondagem de pendências usa LIMIT e índices, sem contar todo o histórico a cada poll. A ponte pausa ao atingir 500 pendências de outbox + interpretações ainda não aplicadas nos destinos. A admissão é verificada antes da próxima página, que pode conter até 50 chamadas; não é um limite rígido da fila durante o processamento. A sondagem soma dois conjuntos, cada um limitado a 500 linhas, e não corresponde necessariamente a 500 capturas distintas.
+Desde DB-09.1, a captura não depende da contagem de pendências nem dos bytes cumulativos aceitos. GET /v1/admission e a escrita verificam espaço livre real, incluindo a sonda do volume físico do host. DATA_RAW_MIN_FREE_BYTES define reserva padrão de 4 GiB, acrescida do espaço da próxima captura. Os antigos guards de 500 pendências e 32 GiB foram substituídos; DATA_BRIDGE_RAW_BUDGET não é mais usado. Contrato, configuração e evidência em [ADMISSION.md](ADMISSION.md).
 
-Há orçamento conservador de admissão de 32 GiB de bytes originais por ponte, contado por captura aceita. O preflight reserva o pior caso de uma página (200 MiB); ele pode pausar antes do valor nominal. Não apaga dados nem implementa retenção. DATA_BRIDGE_RAW_BUDGET permite ajuste operacional depois de medir capacidade; mínimo 200 MiB.
-
-Estado ready indica processamento ativo sem rejeições registradas; consulte também lag e fronteiras, pois heartbeat saudável não garante que a origem esteja totalmente acompanhada. paused informa fila ou orçamento; degraded informa rejeições/falhas. Um processo reiniciado retoma o checkpoint. O papel de origem limita conexões a duas; não possui privilégios de alteração das tabelas.
+Estado ready indica atividade, não que a origem esteja acompanhada. Pausa por storage_backpressure conserva cursor e retoma quando houver espaço. Heartbeat recente dessa pausa mantém liveness saudável; ready_for_capture fica falso. degraded informa rejeições/falhas. O worker também pausa antes da próxima iteração sob pressão de armazenamento. Consulte atraso, filas e espaço; não existe retenção automática. O papel de origem limita conexões a duas e não altera tabelas.
 
 ## Comandos
 
@@ -146,9 +146,9 @@ Fontes do protocolo: [isolamento PostgreSQL](https://www.postgresql.org/docs/cur
 
 ## Capacidade e manutenção
 
-Os microbatches amortizam commits da persistência e da confirmação analítica. O PostgreSQL mantém COPY binário; o DuckLake usa inserções JSON tipadas para os membros novos do grupo, conservando textos decimais sem passagem por float. No ClickHouse, a consulta de identidades é limitada e enviada em partes no corpo do request para evitar limites de URL/formulário. Essas mudanças preservam as verificações descritas acima; sua existência não demonstra que a vazão já acompanha a origem.
+Os microbatches amortizam commits da persistência e da confirmação analítica. O PostgreSQL mantém COPY binário; o DuckLake usa inserções JSON tipadas para os membros novos do grupo, conservando textos decimais sem passagem por float. No ClickHouse, a consulta global de identidades usa grupos de até 256 IDs, preservando o orçamento de 128 MiB lidos por consulta. A falha real era leitura excessiva (307), reproduzida também com parâmetros no corpo; não foi atribuída ao tamanho da URL. Essas mudanças preservam as verificações descritas acima; sua existência não demonstra que a vazão já acompanha a origem.
 
-Recibos pequenos usam data inlining do DuckLake no catálogo PostgreSQL. Fatos permanecem em Parquet. A cada 128 interpretações com recibo analítico confirmado, e somente em iteração sem erro, o escritor verifica o limiar de 64 arquivos ativos menores que 1 MiB e pode produzir no máximo dois arquivos compactados, alvo de 8 MB, nas tabelas facts_log e batch_receipts. Cada tabela produz no máximo um arquivo por chamada. O merge usa uma thread e restaura o valor anterior ao terminar, inclusive em falha. O sink possui um diretório temporário privado com spill limitado a 128 MB, mantendo RAM de 256 MB. O orçamento de dois é global por execução; não representa limite de bytes de entrada ou de metadados lidos. O processo não expira snapshots nem apaga arquivos históricos. A retenção física continua uma etapa operacional futura.
+Recibos pequenos usam data inlining do DuckLake no catálogo PostgreSQL. Fatos permanecem em Parquet. A cada 128 interpretações confirmadas no Lake, o ciclo independente de manutenção verifica o limiar de 64 arquivos ativos menores que 1 MiB e pode produzir no máximo dois arquivos compactados, alvo de 8 MB, nas tabelas facts_log e batch_receipts. Cada tabela produz no máximo um arquivo por chamada. O merge usa uma thread e restaura o valor anterior ao terminar, inclusive em falha. O sink possui um diretório temporário privado com spill limitado a 128 MB, mantendo RAM de 256 MB. O orçamento de dois é global por execução; não representa limite de bytes de entrada ou de metadados lidos. O processo não expira snapshots nem apaga arquivos históricos. A retenção física continua uma etapa operacional futura.
 
 A manutenção usa o mesmo lock distribuído do escritor. A execução manual preserva o estado anterior do worker:
 
@@ -156,9 +156,9 @@ A manutenção usa o mesmo lock distribuído do escritor. A execução manual pr
 pwsh -NoProfile -File scripts/gmgn-data.ps1 compact
 ```
 
-Os detalhes de saúde incluem duração da normalização e da etapa analítica na última iteração, quantidade de campos/fatos, replays, grupos concluídos, fallbacks por etapa e última manutenção. As durações por iteração não são latência individual por captura; os contadores não são uma prova de capacidade sustentável. Erro de manutenção permanece visível até uma tentativa bem-sucedida. A ponte usa pausa de 100 ms apenas depois de página completa; demais páginas e pausas por orçamento aguardam 1 segundo, com backoff em falhas. Os limites de página, fila e bruto continuam aplicados.
+Os detalhes de saúde incluem duração da normalização e da etapa analítica na última iteração, quantidade de campos/fatos, replays, grupos concluídos, fallbacks por etapa e última manutenção. As durações por iteração não são latência individual por captura; os contadores não são uma prova de capacidade sustentável. Erro de manutenção permanece visível até uma tentativa bem-sucedida. A ponte usa pausa de 100 ms apenas depois de página completa; demais páginas e pausas por orçamento aguardam 1 segundo, com backoff em falhas. Os limites por página e por captura continuam aplicados; a admissão por 500 pendências e por bytes cumulativos foi removida.
 
-O orçamento de bruto contabiliza aceites da ponte; não é limite de ocupação física total do Docker, do PostgreSQL ou de todos os snapshots históricos. Antes de operação prolongada, estabelecer capacidade, retenção e alertas do host com medidas reais de crescimento, além de testar a carga pretendida. Esta documentação descreve o mecanismo implementado, sem declarar resolvido o gargalo de vazão ou atualizar os resultados operacionais.
+A admissão usa espaço físico livre do volume bruto e do host, com reserva mínima de 4 GiB. Bytes acumulados são métricas, não limite de vida da coleta. O monitoramento por etapa e a prova operacional atual estão em [OPERATIONS_READY.md](OPERATIONS_READY.md).
 
 Limites remanescentes concretos:
 
@@ -166,15 +166,17 @@ Limites remanescentes concretos:
 - O limite de 16 MiB tem escopos diferentes no PostgreSQL e nos destinos. Catálogo, issues, serializações, respostas e spill consomem memória além dos bytes admitidos; observar RAM e tempo de cada etapa continua necessário.
 - O bloqueio reproduzido de oito itens inválidos à frente do nono saudável foi corrigido e testado por reagendamento e prioridade de primeira tentativa. Um erro permanente ainda exige correção do dado/contrato/destino: retry não o resolve automaticamente. Não há prazo máximo de resolução ou política de descarte definitivo; carga contínua, custo das tentativas e avanço de retries antigos ainda precisam ser observados.
 - O audit cresce com a faixa temporal e depende de retenção na origem. A ponte não recupera corpos nunca persistidos, não cobre automaticamente chamadas anteriores ao início e não é CDC.
-- Os 32 GiB de admissão e a compactação não apagam histórico. Crescimento físico, expiração de snapshots e retenção de bruto continuam exigindo política operacional e provas de recuperação.
+- A proteção por espaço livre e a compactação não apagam histórico. Crescimento físico, expiração de snapshots e retenção de bruto continuam exigindo política operacional e provas de recuperação.
 - O que comprova capacidade é uma observação sustentada de entrada, saídas verificadas nos dois destinos, filas, atraso e ciclos de audit sob a carga pretendida. Testes de atomicidade e recuperação não substituem essa medição.
 
 Referências: [COPY asyncpg](https://magicstack.github.io/asyncpg/current/api/index.html#asyncpg.connection.Connection.copy_records_to_table), [DuckLake data inlining](https://ducklake.select/docs/stable/duckdb/advanced_features/data_inlining), [compactação DuckLake](https://ducklake.select/docs/stable/duckdb/maintenance/merge_adjacent_files).
 
-## Etapas concorrentes limitadas
+## Etapas concorrentes limitadas — versão atual
 
-Normalização/publicação PostgreSQL e aplicação analítica executam como duas corrotinas do mesmo worker. Cada uma conserva seu grupo de até oito capturas, 10.000 fatos e 16 MiB; os orçamentos de duas etapas simultâneas não representam 16 MiB para o processo inteiro. A analítica só seleciona interpretações já publicadas. Há um único escritor DuckLake/ClickHouse e uma sessão proprietária do lock distribuído; probes dessa sessão são serializados porque asyncpg não permite operações concorrentes na mesma conexão.
+O worker mantém seis ciclos: relay NATS, normalização/publicação PostgreSQL, DuckLake, ClickHouse, manutenção e heartbeat. Cada destino seleciona sua fila em `analytics_deliveries`, com recibo/tentativas/retry/erro próprios. A confirmação analítica final exige os dois recibos concordantes. Um destino lento não bloqueia o outro nem a normalização.
 
-TaskGroup aguarda ambas as etapas antes da manutenção e do heartbeat. Cancelar a coroutine de uma operação síncrona não encerra sua thread: o fechamento do sink espera seu lock antes de liberar a sessão proprietária, inclusive se o encerramento do broker falhar. Os testes de orquestração exercitam esse caso com uma thread real bloqueada, além da barreira de publicação e da divisão de grupos grandes.
+Os grupos conservam até oito capturas, 10.000 fatos e 16 MiB; a normalização ainda limita o grupo por 10.000 observações de campos. Uma captura indivisível conserva seu contrato. Os orçamentos são por etapa e não representam o consumo de RAM do processo inteiro. Há um proprietário distribuído e uma escrita por destino; a manutenção usa somente o lock do Lake. A sessão proprietária é sondada pelo heartbeat, sem uso concorrente de asyncpg nessa conexão.
 
-As métricas separam leitura da captura, computação da normalização, preparação do envelope, persistência PostgreSQL e aplicação analítica. As etapas sobrepostas não devem ter suas durações somadas para estimar latência total. A medição operacional conta saídas com recibos confirmados, além de aceites, filas e avanço temporal da ponte.
+Cancelar uma coroutine não encerra uma thread síncrona. O fechamento espera os locks dos sinks antes de liberar o proprietário. Erros transitórios reagendam grupos; conflitos permitem recuperação individual excepcional. Inicialização incompleta do consumidor é retomável. `/v1/status.pipeline` separa captura disponível, processo vivo, processamento pronto e processamento atualizado; as filas têm idade e os destinos têm pendências com erro.
+
+O runtime padrão é `midas-data-base`, em volumes novos. O ambiente anterior fica parado, com dados preservados. A ponte não está ativa enquanto a origem legada estiver parada. Evidências e limite do aceite de carga: [OPERATIONS_READY.md](OPERATIONS_READY.md).

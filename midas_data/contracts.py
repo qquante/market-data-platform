@@ -178,7 +178,7 @@ class CaptureMetadata(ContractModel):
 
     @model_validator(mode='after')
     def validate_clock_order(self) -> CaptureMetadata:
-        if self.chain is None and self.endpoint in {'token_info', 'market_rank'}:
+        if self.chain is None and self.endpoint in {'token_info', 'market_rank', 'trenches'}:
             raise ValueError('token adapters require an explicit capture chain')
         parameter_chain = self.request_params.get('chain')
         # Null query chain remains null/unspecified, preserving legacy metadata.

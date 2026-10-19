@@ -1,0 +1,306 @@
+{
+  "$defs": {
+    "Strategy": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "market_cap_min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Market Cap Min"
+        },
+        "market_cap_max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Market Cap Max"
+        },
+        "holder_top10_share_max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holder Top10 Share Max"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Strategy",
+      "type": "object"
+    },
+    "StudySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "transitions",
+            "matched_controls",
+            "event_study",
+            "prefix_neighbors"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "cap_bins_usd": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 49,
+          "title": "Cap Bins Usd",
+          "type": "array"
+        },
+        "time_block_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Block Seconds"
+        },
+        "holder_exposure_max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holder Exposure Max"
+        },
+        "level_usd": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level Usd"
+        },
+        "pre_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pre Seconds"
+        },
+        "post_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Post Seconds"
+        },
+        "resolution_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution Seconds"
+        },
+        "prefix_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix Seconds"
+        },
+        "prefix_steps": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 2,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix Steps"
+        },
+        "top_k": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Top K",
+          "type": "integer"
+        },
+        "max_distance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Distance"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "StudySpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "strategies": {
+      "items": {
+        "$ref": "#/$defs/Strategy"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Strategies",
+      "type": "array"
+    },
+    "studies": {
+      "items": {
+        "$ref": "#/$defs/StudySpec"
+      },
+      "maxItems": 10,
+      "title": "Studies",
+      "type": "array"
+    },
+    "train_end": {
+      "format": "date-time",
+      "title": "Train End",
+      "type": "string"
+    },
+    "validation_end": {
+      "format": "date-time",
+      "title": "Validation End",
+      "type": "string"
+    },
+    "test_end": {
+      "format": "date-time",
+      "title": "Test End",
+      "type": "string"
+    },
+    "embargo_seconds": {
+      "maximum": 86400,
+      "minimum": 0,
+      "title": "Embargo Seconds",
+      "type": "integer"
+    },
+    "fee_bps": {
+      "title": "Fee Bps",
+      "type": "string"
+    },
+    "slippage_bps": {
+      "title": "Slippage Bps",
+      "type": "string"
+    },
+    "network_usd_per_side": {
+      "title": "Network Usd Per Side",
+      "type": "string"
+    },
+    "notional_usd": {
+      "title": "Notional Usd",
+      "type": "string"
+    },
+    "starting_cash_usd": {
+      "title": "Starting Cash Usd",
+      "type": "string"
+    },
+    "max_positions": {
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Max Positions",
+      "type": "integer"
+    },
+    "purpose": {
+      "const": "exploratory",
+      "default": "exploratory",
+      "title": "Purpose",
+      "type": "string"
+    }
+  },
+  "required": [
+    "strategies",
+    "train_end",
+    "validation_end",
+    "test_end",
+    "embargo_seconds",
+    "fee_bps",
+    "slippage_bps",
+    "network_usd_per_side",
+    "notional_usd",
+    "starting_cash_usd",
+    "max_positions"
+  ],
+  "title": "ExperimentSpec",
+  "type": "object"
+}

@@ -144,8 +144,11 @@ class Connection:
                 if row["fact_id"] in self.data["facts"]:
                     raise asyncpg.UniqueViolationError("duplicate fixture fact")
                 self.data["facts"][row["fact_id"]] = {**row, "available_at": None}
+            elif table == 'field_catalog_batches':
+                self.data['fields'].extend({**f,'capture_id':row['capture_id'],
+                    'normalizer_version':row['normalizer_version']} for f in json.loads(row['fields']))
             else:
-                self.data["fields"].append(row)
+                raise AssertionError(table)
 
 
 class Acquire:
@@ -198,7 +201,7 @@ def test_eight_outputs_use_one_content_commit_two_copies_and_one_publication():
     assert [r["batch_id"] for r in replies] == [hashlib.sha256((str(cid) + ":" + result.normalizer_version).encode()).hexdigest() for cid, result in items]
     assert con.events == ["begin", "commit", "begin", "publication_lock", "commit"]
     assert con.clocks == 1 and store.pool.acquires == 1
-    assert [name for name, _ in con.copies] == ["facts", "field_observations"]
+    assert [name for name, _ in con.copies] == ["facts", "field_catalog_batches"]
     assert len(con.data["facts"]) == 16 and len(con.data["runs"]) == 8
     markers = {row["available_at"] for row in con.data["runs"].values()}
     assert len(markers) == 1 and None not in markers
@@ -247,7 +250,7 @@ def test_copy_failure_rolls_back_all_runs_facts_catalogue_and_capture_states():
     items = [item(), item()]
     store, con = fake_store(items)
     snapshot = deepcopy(con.data)
-    con.fail_copy = "field_observations"
+    con.fail_copy = "field_catalog_batches"
     with pytest.raises(RuntimeError, match="COPY"):
         run(store.record_normalizations(items))
     assert con.data == snapshot
@@ -395,9 +398,12 @@ async def _postgres_group_proof():
             server_settings={'search_path':schema,'timezone':'UTC','statement_timeout':'15000'})
         async with pool.acquire() as con:
             # Real foundation constraints and foreign keys, isolated from runtime.
-            schema_sql=Path(__file__).parents[1].joinpath('midas_data/migrations/001_foundation.sql').read_text(encoding='utf-8')
-            await con.execute(schema_sql)
-            await con.execute(Path(__file__).parents[1].joinpath('midas_data/migrations/005_analytics_retry.sql').read_text(encoding='utf-8'))
+            migrations=Path(__file__).parents[1].joinpath('midas_data/migrations')
+            for migration in sorted(migrations.glob('*.sql')):
+                await con.execute(migration.read_text(encoding='utf-8'))
+            assert await con.fetchval("SELECT to_regclass('facts_token_time_idx')") is None
+            for name in ('facts_pkey','facts_seq_key','facts_capture_idx','facts_observations_idx','facts_as_known_idx'):
+                assert await con.fetchval('SELECT to_regclass($1)',name) is not None
             await con.execute("INSERT INTO raw_objects(sha256,relative_path,size_bytes) VALUES($1,'fixture',0)",'0'*64)
             items=[item() for _ in range(5)]
             for cid,result in items:
@@ -408,6 +414,17 @@ async def _postgres_group_proof():
         replies=await store.record_normalizations(items[:2])
         markers=await pool.fetch('SELECT available_at FROM normalization_runs ORDER BY capture_id')
         assert len({r['available_at'] for r in markers})==1 and markers[0]['available_at'] is not None
+        # Queries retain provenance, cutoff and exact decimal text with the legacy index removed.
+        fact=items[0][1].facts[0]
+        cutoff=await pool.fetchval('SELECT clock_timestamp()')
+        observed=await store.observations(fact.chain,fact.token_address,fact.metric,
+            fact.occurred_at-timedelta(seconds=1),cutoff,cutoff,'fixture',10,include_unverified=True)
+        assert len(observed)==1 and observed[0]['value_text']==fact.value_text
+        known=await store.as_known(fact.chain,fact.token_address,cutoff,cutoff,'fixture',True)
+        assert {r['fact_id'] for r in known}=={f.fact_id for f in items[0][1].facts}
+        assert not await store.as_known(fact.chain,fact.token_address,cutoff,cutoff,'legacy_gmgn',True)
+        earlier=min(r['available_at'] for r in markers)-timedelta(microseconds=1)
+        assert not await store.as_known(fact.chain,fact.token_address,cutoff,earlier,'fixture',True)
         original=await pool.fetchval('SELECT available_at FROM normalization_runs WHERE capture_id=$1',items[0][0])
         await store.record_normalizations([items[0],items[2]])
         assert await pool.fetchval('SELECT available_at FROM normalization_runs WHERE capture_id=$1',items[0][0])==original
@@ -519,3 +536,21 @@ def test_retry_does_not_publish_unknown_or_unpublished_run():
     row=next(iter(con.data['runs'].values()))
     assert run(store.defer_analytics(row['batch_id'],'BatchConflict')) is None
     assert run(store.defer_analytics('missing','BatchConflict')) is None
+
+
+def test_repeated_field_pointer_is_rejected_before_any_write():
+    cid,result=item()
+    invalid=result.model_copy(update={'fields':[result.fields[0],result.fields[0]]})
+    store,con=fake_store([(cid,invalid)])
+    with pytest.raises(ValueError,match='normalization_duplicate_field_pointer'):
+        run(store.record_normalization(cid,invalid))
+    assert not con.copies and not con.data['runs']
+
+
+def test_field_catalog_is_one_packet_per_capture_with_exact_field_content():
+    cid,result=item()
+    store,con=fake_store([(cid,result)])
+    run(store.record_normalization(cid,result))
+    assert ('field_catalog_batches',1) in con.copies
+    fields=[{k:v for k,v in f.items() if k not in ('capture_id','normalizer_version')} for f in con.data['fields']]
+    assert fields==[f.model_dump(mode='json') for f in result.fields]

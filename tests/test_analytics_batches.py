@@ -110,8 +110,8 @@ def test_real_group_preserves_old_snapshot_membership_exact_values_and_replay(si
     assert sum(query.startswith("INSERT INTO lake.batch_receipts") for query in sink.sql_calls) == 1
     assert sum(query.startswith("INSERT INTO midas_data.facts_log") for query in sink.ch_calls) == 1
     assert sum(query.startswith("INSERT INTO midas_data.batch_receipts_log") for query in sink.ch_calls) == 1
-    # More than 256 identities must not cause a per-chunk SELECT loop.
-    assert sum(query.startswith("SELECT source_kind,fact_id,row_hash") for query in sink.ch_calls) == 2
+    # Identity reads stay bounded even when writes share a larger group.
+    assert sum(query.startswith("SELECT source_kind,fact_id,row_hash") for query in sink.ch_calls) == 2 * ((len({r["fact_id"] for _,rs in batches for r in rs}) + 255) // 256)
     # Every batch retains its own membership, even when another batch contains
     # the identical immutable fact. Values and per-batch hashes round-trip.
     for batch, facts_in_batch in batches:

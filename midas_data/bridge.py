@@ -172,17 +172,12 @@ class BridgeConfig:
     origin_at: datetime
     binding: str
     source_kind: str = "legacy_gmgn"
-    queue_limit: int = 500
-    # Admission budget, not a retention/delete policy. Conservatively counts each ACK.
-    raw_budget: int = 32 * 1024**3
 
     def __post_init__(self):
         if self.source_kind not in {"legacy_gmgn", "fixture"}:
             raise ValueError("invalid_bridge_source_kind")
         if self.source_kind == "fixture" and not self.source_name.startswith("fixture:"):
             raise ValueError("fixture_bridge_name_required")
-        if not 1 <= self.queue_limit <= 10000 or not PAGE_SIZE*MAX_RAW_BYTES <= self.raw_budget <= 1024**4:
-            raise ValueError("invalid_bridge_budget")
         utc_datetime(self.origin_at)
 
     @property
@@ -194,8 +189,9 @@ class BridgeConfig:
 
 class Bridge:
     """Public processing interface; source and ACK transport are injectable for acceptance."""
-    def __init__(self, config: BridgeConfig, database, source, deliver):
+    def __init__(self, config: BridgeConfig, database, source, deliver, admission):
         self.config, self.db, self.source, self.deliver = config, database, source, deliver
+        self.admission = admission
         self.locked = False
 
     async def open(self):
@@ -247,7 +243,7 @@ class Bridge:
                 row["endpoint"][:256],row["status"],original,state,reason,raw_sha,raw_bytes,
                 row["call_id"] if state == "accepted" else None)
             deltas = [int(state == s) - int(previous == s) for s in ("accepted", "unavailable", "rejected")]
-            # Never reduce the admission byte budget when an accepted source is mutated.
+            # Preserve the lifetime audit counter even when an accepted source is mutated.
             byte_delta = raw_bytes if state == "accepted" and (old is None or old["raw_bytes"] is None) else 0
             await self.db.execute("""
                 UPDATE bridge_state SET accepted_count=accepted_count+$2,unavailable_count=unavailable_count+$3,
@@ -307,20 +303,26 @@ class Bridge:
         await self._receipt(row,fingerprint,"accepted",None,capture.sha256,len(capture.raw))
         return "accepted"
 
+    async def capacity(self) -> dict:
+        value = await self.admission()
+        if (not isinstance(value,dict) or type(value.get("accepting")) is not bool
+            or any(type(value.get(k)) is not int or value[k] < 0 for k in ("free_bytes","required_free_bytes"))
+            or value.get("basis") != "storage_filesystems_free_space"
+            or value["accepting"] != (value["free_bytes"] >= value["required_free_bytes"])):
+            raise ValueError("invalid_capture_admission")
+        return value
+
+    async def pause_for_storage(self, capacity: dict) -> dict:
+        await self.pulse("paused",capacity,"storage_backpressure")
+        return {"state":"paused",**capacity}
+
     async def step(self) -> dict:
         if not self.locked or self.db.is_closed():
             raise RuntimeError("bridge_session_lost")
         state = await self.db.fetchrow("SELECT * FROM bridge_state WHERE source_name=$1",self.config.source_name)
-        # Bounded probes: no COUNT over the complete queue/history per poll.
-        pending = await self.db.fetchval("""
-            SELECT (SELECT count(*) FROM (SELECT 1 FROM outbox WHERE consumed_at IS NULL LIMIT $1) q)
-                 + (SELECT count(*) FROM (SELECT 1 FROM normalization_runs WHERE available_at IS NOT NULL AND analytics_applied_at IS NULL LIMIT $1) q)
-            """,self.config.queue_limit)
-        if pending >= self.config.queue_limit or state["accepted_raw_bytes"] + PAGE_SIZE*MAX_RAW_BYTES > self.config.raw_budget:
-            info = {"pending_bounded":pending,"queue_limit":self.config.queue_limit,
-                    "accepted_raw_bytes":state["accepted_raw_bytes"],"raw_budget":self.config.raw_budget}
-            await self.pulse("paused",info,"queue_backpressure" if pending >= self.config.queue_limit else "raw_admission_budget")
-            return {"state":"paused",**info}
+        capacity = await self.capacity()
+        if not capacity["accepting"]:
+            return await self.pause_for_storage(capacity)
         progress = json.loads(state["progress"])
         now = await self.source.clock()
         prepared = prepare_lane(progress,self.config.origin_at,now)
@@ -337,7 +339,14 @@ class Bridge:
                 or (lower is not None and any(key<=lower for key in keys))):
                 raise ValueError("source_page_order_or_bounds")
             for row in rows:
-                result = await self.process_row(row)
+                try:
+                    result = await self.process_row(row)
+                except ImportFailure as exc:
+                    if exc.code == "api_http_503":
+                        capacity = await self.capacity()
+                        if not capacity["accepting"]:
+                            return await self.pause_for_storage(capacity)
+                    raise
                 counts[result] = counts.get(result,0) + 1
             finish_page(progress,name,rows,now)
         else:
@@ -351,7 +360,7 @@ class Bridge:
         info = {"lane":name,"page":counts,"source_clock":iso(now),
                 "forward_lag_seconds":max(0,(now-utc_datetime(progress["forward_until"])).total_seconds()),
                 "coverage":"received_at_from_origin_revisited_not_commit_complete",
-                "rejected_count":rejected}
+                "rejected_count":rejected,"storage":capacity}
         await self.pulse("degraded" if rejected else "ready",info)
         return info
 
@@ -377,10 +386,12 @@ async def connect_destination():
 
 
 def poll_delay(failures: int, info: dict) -> float:
-    # Full backlog/reconciliation pages may advance quickly; the queue and raw
-    # budgets still gate every page. Empty, partial and paused work polls at 1s.
+    # Full pages may advance quickly; storage admission gates every page.
+    # Backlog is durable and never gates capture. Paused work retries at 5s.
     if failures:
         return min(15,1+failures*2)
+    if info.get("state") == "paused":
+        return 5.0
     return 0.1 if sum(info.get("page",{}).values()) == PAGE_SIZE else 1.0
 
 
@@ -389,8 +400,7 @@ async def run():
     validate_source_dsn(source_dsn)
     config = BridgeConfig(source_name="gmgn-legacy-live-v1",
         origin_at=utc_datetime(os.environ["DATA_BRIDGE_START_AT"]),
-        binding="midas-fomo-postgres-1:5432/midas_fomo/public/"+os.environ["DATA_LEGACY_SYSTEM_ID"],
-        raw_budget=int(os.getenv("DATA_BRIDGE_RAW_BUDGET",str(32*1024**3))))
+        binding="midas-fomo-postgres-1:5432/midas_fomo/public/"+os.environ["DATA_LEGACY_SYSTEM_ID"])
     database = source_con = None
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -415,6 +425,10 @@ async def run():
         key = os.environ["DATA_API_KEY"]
         api = local_api_url(os.getenv("DATA_BRIDGE_API_URL","http://api:8791"))
         with httpx.Client(timeout=httpx.Timeout(15,connect=3),trust_env=False,follow_redirects=False) as client:
+            async def admission():
+                _,value = await asyncio.to_thread(_request_json,client,"GET",api+"/v1/admission",
+                    {"authorization":"Bearer "+key})
+                return value
             async def deliver(capture):
                 status,ack = await asyncio.to_thread(_request_json,client,"POST",api+"/v1/captures",
                     {"authorization":"Bearer "+key,"x-midas-metadata":capture.metadata_header(),
@@ -422,7 +436,7 @@ async def run():
                 if status != 202:
                     raise ImportFailure("capture_http_status")
                 return ack
-            bridge = await Bridge(config,database,PgSource(source_con),deliver).open()
+            bridge = await Bridge(config,database,PgSource(source_con),deliver,admission).open()
             failures = 0
             while not stop.is_set():
                 try:
@@ -446,6 +460,11 @@ async def run():
             await database.close()
 
 
+def bridge_healthy(row) -> bool:
+    return bool(row and row["fresh"] and (row["state"] == "ready" or
+        (row["state"] == "paused" and row["last_error"] == "storage_backpressure")))
+
+
 async def status(health=False):
     con = await connect_destination()
     try:
@@ -455,8 +474,10 @@ async def status(health=False):
              heartbeat_at>clock_timestamp()-interval '90 seconds' AS fresh
             FROM bridge_state WHERE source_name='gmgn-legacy-live-v1'""")
         if health:
-            return 0 if row and row["fresh"] and row["state"] == "ready" else 1
-        print(json.dumps(dict(row) if row else {"state":"not_started"},default=str,indent=2))
+            return 0 if bridge_healthy(row) else 1
+        value = dict(row) if row else {"state":"not_started"}
+        value.update(healthy=bridge_healthy(row),ready_for_capture=bool(row and row["fresh"] and row["state"] == "ready"))
+        print(json.dumps(value,default=str,indent=2))
         return 0
     finally:
         await con.close()

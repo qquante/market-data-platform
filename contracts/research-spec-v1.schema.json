@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "source_kind": {
+      "enum": [
+        "fixture",
+        "gmgn",
+        "legacy_gmgn"
+      ],
+      "title": "Source Kind",
+      "type": "string"
+    },
+    "chain": {
+      "const": "sol",
+      "default": "sol",
+      "title": "Chain",
+      "type": "string"
+    },
+    "cohort_start": {
+      "format": "date-time",
+      "title": "Cohort Start",
+      "type": "string"
+    },
+    "cohort_end": {
+      "format": "date-time",
+      "title": "Cohort End",
+      "type": "string"
+    },
+    "knowledge_cutoff": {
+      "format": "date-time",
+      "title": "Knowledge Cutoff",
+      "type": "string"
+    },
+    "method": {
+      "title": "Method",
+      "type": "string"
+    },
+    "entry_delay_seconds": {
+      "maximum": 3600,
+      "minimum": 0,
+      "title": "Entry Delay Seconds",
+      "type": "integer"
+    },
+    "horizon_seconds": {
+      "maximum": 86400,
+      "minimum": 60,
+      "title": "Horizon Seconds",
+      "type": "integer"
+    },
+    "max_gap_seconds": {
+      "maximum": 3600,
+      "minimum": 1,
+      "title": "Max Gap Seconds",
+      "type": "integer"
+    },
+    "levels_usd": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Levels Usd",
+      "type": "array"
+    },
+    "max_members": {
+      "default": 50,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Max Members",
+      "type": "integer"
+    },
+    "max_points_per_series": {
+      "default": 500,
+      "maximum": 2000,
+      "minimum": 1,
+      "title": "Max Points Per Series",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "source_kind",
+    "cohort_start",
+    "cohort_end",
+    "knowledge_cutoff",
+    "method",
+    "entry_delay_seconds",
+    "horizon_seconds",
+    "max_gap_seconds",
+    "levels_usd"
+  ],
+  "title": "ResearchSpec",
+  "type": "object"
+}

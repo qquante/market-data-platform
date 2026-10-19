@@ -1,0 +1,3660 @@
+{
+  "schema": "midas.field-evidence.v1",
+  "reviewed_at_utc_date": "2026-09-08",
+  "normalizer_version": "gmgn-p0-v3",
+  "source_scope": "Official field documentation; ten previously imported original responses; no new GMGN API request.",
+  "sources": {
+    "token_info": {
+      "url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "revision": "main as retrieved on 2026-09-08; upstream commit not pinned",
+      "section": "token info response field reference"
+    },
+    "market_rank": {
+      "url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "revision": "main as retrieved on 2026-09-08; upstream commit not pinned",
+      "section": "market trending response field reference"
+    }
+  },
+  "sample": {
+    "path": ".data/gmgn-data/import-20260908T215742Z-17afd8ca.jsonl",
+    "export_sha256": "1be15cefad8895393775e2d9047faee92f47e994fed209699b26719e4b604f80",
+    "captures": 10,
+    "original_raw_sha256": [
+      "87adb9f2ee29e4ca14f68cfd3331a62d4d6de961c1294b51ebcb40e399631ac3",
+      "806755a2e7ae4c585a778510af37a491f2fe83e29e235342c43c0db75331839a",
+      "f968e104a848ced282f8020761fc42f4acea7ee2cc2e21c207604830ab76e4ab",
+      "d4e8368398f5132f2f3de5c84e8c4f6c0ac81a4add01719767e10f5a1eca7128",
+      "3c9295ecbcaf7915f023b6f8c57ea0abe37e28f9b34fdb61f551b6b324efcb59",
+      "5dfde36ebd2fc2bdae589f0e2307e524182401d18d9be9cb2f4b5dc9d243d520",
+      "19ec28cb879f5763084f6e6d5a5af82916c7be1e11d6e582baae3a373e3b1a59",
+      "2db3cb24e146e3ee490d2350c4c214219c577ec028d8eaf37e9bdc90ec1a93a7",
+      "ca01e6d4bfbbf8681e2b3963d5b54016f3509696f140fb88767d8063b3e0c7e7",
+      "139df594d43d0ecc7deb347ca3ca75c0b3e903010a4fa08e8268fec8e036b8f8"
+    ],
+    "raw_length_and_both_source_sha256_verified": true,
+    "normalizer_version": "gmgn-p0-v3",
+    "registry_contract_count": 122,
+    "counts": {
+      "token_info": {
+        "documented_provider_contract": 59,
+        "pending_semantic_homologation": 11
+      },
+      "market_rank": {
+        "documented_provider_contract": 21,
+        "pending_semantic_homologation": 31
+      }
+    },
+    "capture_counts": {
+      "token_info": 7,
+      "market_rank": 3
+    },
+    "token_observation_counts": {
+      "token_info": 7,
+      "market_rank": 5
+    },
+    "chains": {
+      "token_info": {
+        "bsc": 3,
+        "base": 1,
+        "robinhood": 3
+      },
+      "market_rank": {
+        "eth": 1,
+        "stable": 1,
+        "arc": 1
+      }
+    },
+    "sample_raw_bytes": 41609,
+    "sample_fact_quality": {
+      "valid": 437,
+      "unverified": 181,
+      "invalid": 46,
+      "missing": 32
+    },
+    "sample_unknown_nodes": 1023,
+    "sample_issues": {
+      "invalid_field": 46
+    }
+  },
+  "contracts": [
+    {
+      "contract_id": "gmgn.token_info.v3:name",
+      "endpoint": "token_info",
+      "relative_pointer": "/name",
+      "metric": "name",
+      "value_type": "string",
+      "category": "identity",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Nome informado pelo provedor; texto não confiável, sem identidade econômica implícita.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:symbol",
+      "endpoint": "token_info",
+      "relative_pointer": "/symbol",
+      "metric": "symbol",
+      "value_type": "string",
+      "category": "identity",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Ticker informado pelo provedor; não é identificador único.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:decimals",
+      "endpoint": "token_info",
+      "relative_pointer": "/decimals",
+      "metric": "decimals",
+      "value_type": "integer",
+      "category": "supply",
+      "unit": "decimal_places",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Precisão declarada do token; não autoriza reescalar um supply já humano.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:holder_count",
+      "endpoint": "token_info",
+      "relative_pointer": "/holder_count",
+      "metric": "holder_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_unique_holder_count",
+      "semantic": "Quantidade reportada de holders únicos; não equivale a compradores ou traders históricos.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:total_supply",
+      "endpoint": "token_info",
+      "relative_pointer": "/total_supply",
+      "metric": "total_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "human_vs_atomic_supply_scale_unverified",
+      "semantic": "Supply total reportado; escala humana/atômica deste caminho não comprovada.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:circulating_supply",
+      "endpoint": "token_info",
+      "relative_pointer": "/circulating_supply",
+      "metric": "circulating_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": "token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_human_token_units_no_decimal_rescaling",
+      "semantic": "Supply circulante já em unidades humanas de token; preservar Decimal/texto, não dividir por 10^decimals.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:max_supply",
+      "endpoint": "token_info",
+      "relative_pointer": "/max_supply",
+      "metric": "max_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "human_vs_atomic_supply_scale_unverified",
+      "semantic": "Supply máximo reportado; escala e significado de sentinelas não comprovados.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:creation_timestamp",
+      "endpoint": "token_info",
+      "relative_pointer": "/creation_timestamp",
+      "metric": "creation_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": "unix_second",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_event_attribute_unix_seconds",
+      "semantic": "Atributo de criação reportado para o token, em segundos Unix; não é relógio de recepção.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:open_timestamp",
+      "endpoint": "token_info",
+      "relative_pointer": "/open_timestamp",
+      "metric": "open_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": "unix_second",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_event_attribute_unix_seconds",
+      "semantic": "Atributo de abertura reportado para o token, em segundos Unix; não substitui criação.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:migrated_timestamp",
+      "endpoint": "token_info",
+      "relative_pointer": "/migrated_timestamp",
+      "metric": "migrated_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_migration_timestamp_path_unit_unverified",
+      "semantic": "Caminho reconhecido, unidade e evento de migração exatos não documentados.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:liquidity",
+      "endpoint": "token_info",
+      "relative_pointer": "/liquidity",
+      "metric": "liquidity",
+      "value_type": "decimal",
+      "category": "liquidity",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_main_pool_liquidity_usd",
+      "semantic": "Liquidez USD do maior/principal pool informado pelo provedor; não agregado de todos pools.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:initial_liquidity",
+      "endpoint": "token_info",
+      "relative_pointer": "/initial_liquidity",
+      "metric": "initial_liquidity",
+      "value_type": "decimal",
+      "category": "liquidity",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "initial_liquidity_currency_event_scope_unverified",
+      "semantic": "Liquidez inicial reportada; unidade e evento inicial exatos pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 7
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:launchpad",
+      "endpoint": "token_info",
+      "relative_pointer": "/launchpad",
+      "metric": "launchpad",
+      "value_type": "string",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Identificador do launchpad; vocabulário depende da origem.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:launchpad_status",
+      "endpoint": "token_info",
+      "relative_pointer": "/launchpad_status",
+      "metric": "launchpad_status",
+      "value_type": "integer",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Estado reportado pelo endpoint; enums entre origens não são equivalentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1,
+          2
+        ]
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:launchpad_platform",
+      "endpoint": "token_info",
+      "relative_pointer": "/launchpad_platform",
+      "metric": "launchpad_platform",
+      "value_type": "string",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Nome da plataforma de lançamento/pool informado pelo provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:launchpad_progress",
+      "endpoint": "token_info",
+      "relative_pointer": "/launchpad_progress",
+      "metric": "launchpad_progress",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": "ratio",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Progresso reportado do launchpad; escala homologada somente em token_info.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": true,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5,
+        "decimal": 2
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:locked_ratio",
+      "endpoint": "token_info",
+      "relative_pointer": "/locked_ratio",
+      "metric": "locked_ratio",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": "ratio",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Parcela de supply bloqueado quando o endpoint documenta escala e denominador.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": true,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price",
+      "metric": "price",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Preço reportado USD por token; não é garantia de execução, fill ou preço de cada pool.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:ath_price",
+      "endpoint": "token_info",
+      "relative_pointer": "/ath_price",
+      "metric": "ath_price",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_reported_ath_price_peak_time_unspecified",
+      "semantic": "Preço máximo histórico reportado; não informa o instante do pico nem market cap nesse pico.",
+      "grain": "token_observation",
+      "window": "provider_history_peak_time_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 6,
+        "decimal": 1
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:migration_market_cap",
+      "endpoint": "token_info",
+      "relative_pointer": "/migration_market_cap",
+      "metric": "migration_market_cap",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd",
+      "quality_if_well_formed": "unverified",
+      "reason": "migration_cap_supply_basis_event_quote_unverified",
+      "semantic": "Capitalização de migração reportada; base de supply/evento/quote pendente.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5,
+        "decimal": 2
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.top_10_holder_rate",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/top_10_holder_rate",
+      "metric": "top_10_holder_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": "ratio",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_top10_supply_share",
+      "semantic": "Fração reportada do supply concentrada no top 10; metodologia/exclusões do provedor não verificadas.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": true,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.dev_team_hold_rate",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/dev_team_hold_rate",
+      "metric": "dev_team_hold_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Participação reportada da equipe; escala e denominador exatos pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.top_rat_trader_percentage",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/top_rat_trader_percentage",
+      "metric": "top_rat_trader_percentage",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "volume_share_scale_window_unverified",
+      "semantic": "Participação reportada de volume dos rat traders; janela e escala pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.top_bundler_trader_percentage",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/top_bundler_trader_percentage",
+      "metric": "top_bundler_trader_percentage",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "volume_share_scale_window_unverified",
+      "semantic": "Participação reportada de volume dos bundlers; janela e escala pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.top_entrapment_trader_percentage",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/top_entrapment_trader_percentage",
+      "metric": "top_entrapment_trader_percentage",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "volume_share_scale_window_unverified",
+      "semantic": "Participação reportada de volume de entrapment; janela e escala pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.bot_degen_rate",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/bot_degen_rate",
+      "metric": "bot_degen_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Razão de bot/degen reportada; população/escala/janela pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:stat.bot_degen_count",
+      "endpoint": "token_info",
+      "relative_pointer": "/stat/bot_degen_count",
+      "metric": "bot_degen_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Contagem de wallets rotuladas bot/degen pelo provedor; classificação não é verificação independente.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:wallet_tags_stat.smart_wallets",
+      "endpoint": "token_info",
+      "relative_pointer": "/wallet_tags_stat/smart_wallets",
+      "metric": "smart_wallets",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets rotuladas smart money que detêm o token segundo o provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:wallet_tags_stat.renowned_wallets",
+      "endpoint": "token_info",
+      "relative_pointer": "/wallet_tags_stat/renowned_wallets",
+      "metric": "renowned_wallets",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets rotuladas KOL que detêm o token segundo o provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:wallet_tags_stat.sniper_wallets",
+      "endpoint": "token_info",
+      "relative_pointer": "/wallet_tags_stat/sniper_wallets",
+      "metric": "sniper_wallets",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets rotuladas sniper; janela/população histórica vs atual não usada para comparação automática.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:link.twitter_username",
+      "endpoint": "token_info",
+      "relative_pointer": "/link/twitter_username",
+      "metric": "twitter_username",
+      "value_type": "string",
+      "category": "social",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_untrusted_metadata_text",
+      "semantic": "Texto de username de X; não converter em URL nem afirmar vínculo ou autoria.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:link.telegram",
+      "endpoint": "token_info",
+      "relative_pointer": "/link/telegram",
+      "metric": "telegram",
+      "value_type": "string",
+      "category": "social",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_untrusted_metadata_text",
+      "semantic": "Texto do link reportado de Telegram; sem validação de URL, identidade ou afiliação.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:link.website",
+      "endpoint": "token_info",
+      "relative_pointer": "/link/website",
+      "metric": "website",
+      "value_type": "string",
+      "category": "social",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_untrusted_metadata_text",
+      "semantic": "Texto do link de website; sem validação de URL, propriedade ou afiliação.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:link.description",
+      "endpoint": "token_info",
+      "relative_pointer": "/link/description",
+      "metric": "description",
+      "value_type": "string",
+      "category": "social",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_untrusted_metadata_text",
+      "semantic": "Descrição reportada; dado não confiável, nunca instrução executável.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:link.twitter",
+      "endpoint": "token_info",
+      "relative_pointer": "/link/twitter",
+      "metric": "twitter",
+      "value_type": "string",
+      "category": "social",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "undocumented_twitter_alias_not_username_or_url",
+      "semantic": "Alias sem documentação exata; não assumir username ou URL.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 7
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price_1m",
+      "metric": "window_reference_price_1m",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_price_at_start_of_named_window",
+      "semantic": "Preço reportado no início da janela 1m; não OHLC, média nem preço de criação.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.volume_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/volume_1m",
+      "metric": "volume_1m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume volume reportado em USD na janela 1m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buy_volume_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buy_volume_1m",
+      "metric": "buy_volume_1m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume buy_volume reportado em USD na janela 1m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sell_volume_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sell_volume_1m",
+      "metric": "sell_volume_1m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume sell_volume reportado em USD na janela 1m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buys_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buys_1m",
+      "metric": "buys_1m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de buys na janela 1m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sells_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sells_1m",
+      "metric": "sells_1m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de sells na janela 1m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.swaps_1m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/swaps_1m",
+      "metric": "swaps_1m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de swaps na janela 1m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price_5m",
+      "metric": "window_reference_price_5m",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_price_at_start_of_named_window",
+      "semantic": "Preço reportado no início da janela 5m; não OHLC, média nem preço de criação.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.volume_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/volume_5m",
+      "metric": "volume_5m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume volume reportado em USD na janela 5m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buy_volume_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buy_volume_5m",
+      "metric": "buy_volume_5m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume buy_volume reportado em USD na janela 5m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sell_volume_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sell_volume_5m",
+      "metric": "sell_volume_5m",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume sell_volume reportado em USD na janela 5m; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buys_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buys_5m",
+      "metric": "buys_5m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de buys na janela 5m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sells_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sells_5m",
+      "metric": "sells_5m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de sells na janela 5m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.swaps_5m",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/swaps_5m",
+      "metric": "swaps_5m",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de swaps na janela 5m; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price_1h",
+      "metric": "window_reference_price_1h",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_price_at_start_of_named_window",
+      "semantic": "Preço reportado no início da janela 1h; não OHLC, média nem preço de criação.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.volume_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/volume_1h",
+      "metric": "volume_1h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume volume reportado em USD na janela 1h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buy_volume_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buy_volume_1h",
+      "metric": "buy_volume_1h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume buy_volume reportado em USD na janela 1h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sell_volume_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sell_volume_1h",
+      "metric": "sell_volume_1h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume sell_volume reportado em USD na janela 1h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buys_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buys_1h",
+      "metric": "buys_1h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de buys na janela 1h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sells_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sells_1h",
+      "metric": "sells_1h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de sells na janela 1h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.swaps_1h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/swaps_1h",
+      "metric": "swaps_1h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de swaps na janela 1h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price_6h",
+      "metric": "window_reference_price_6h",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_price_at_start_of_named_window",
+      "semantic": "Preço reportado no início da janela 6h; não OHLC, média nem preço de criação.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.volume_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/volume_6h",
+      "metric": "volume_6h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume volume reportado em USD na janela 6h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buy_volume_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buy_volume_6h",
+      "metric": "buy_volume_6h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume buy_volume reportado em USD na janela 6h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sell_volume_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sell_volume_6h",
+      "metric": "sell_volume_6h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume sell_volume reportado em USD na janela 6h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buys_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buys_6h",
+      "metric": "buys_6h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de buys na janela 6h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sells_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sells_6h",
+      "metric": "sells_6h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de sells na janela 6h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.swaps_6h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/swaps_6h",
+      "metric": "swaps_6h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de swaps na janela 6h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "6h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.price_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/price_24h",
+      "metric": "window_reference_price_24h",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_price_at_start_of_named_window",
+      "semantic": "Preço reportado no início da janela 24h; não OHLC, média nem preço de criação.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.volume_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/volume_24h",
+      "metric": "volume_24h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume volume reportado em USD na janela 24h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buy_volume_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buy_volume_24h",
+      "metric": "buy_volume_24h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume buy_volume reportado em USD na janela 24h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sell_volume_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sell_volume_24h",
+      "metric": "sell_volume_24h",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_volume_named_window_no_cross_window_sum",
+      "semantic": "Volume sell_volume reportado em USD na janela 24h; não somar janelas sobrepostas.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.buys_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/buys_24h",
+      "metric": "buys_24h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de buys na janela 24h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.sells_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/sells_24h",
+      "metric": "sells_24h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de sells na janela 24h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.token_info.v3:price.swaps_24h",
+      "endpoint": "token_info",
+      "relative_pointer": "/price/swaps_24h",
+      "metric": "swaps_24h",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_transaction_count_named_window",
+      "semantic": "Contagem reportada de swaps na janela 24h; zero preserva zero, ausência não vira zero.",
+      "grain": "token_observation",
+      "window": "24h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 7
+      },
+      "observed_present_count": 7,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:name",
+      "endpoint": "market_rank",
+      "relative_pointer": "/name",
+      "metric": "name",
+      "value_type": "string",
+      "category": "identity",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Nome informado pelo provedor; texto não confiável, sem identidade econômica implícita.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:symbol",
+      "endpoint": "market_rank",
+      "relative_pointer": "/symbol",
+      "metric": "symbol",
+      "value_type": "string",
+      "category": "identity",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Ticker informado pelo provedor; não é identificador único.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:decimals",
+      "endpoint": "market_rank",
+      "relative_pointer": "/decimals",
+      "metric": "decimals",
+      "value_type": "integer",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_path_scale_contract_unverified",
+      "semantic": "Precisão declarada do token; não autoriza reescalar um supply já humano.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:holder_count",
+      "endpoint": "market_rank",
+      "relative_pointer": "/holder_count",
+      "metric": "holder_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_unique_holder_count",
+      "semantic": "Quantidade reportada de holders únicos; não equivale a compradores ou traders históricos.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:total_supply",
+      "endpoint": "market_rank",
+      "relative_pointer": "/total_supply",
+      "metric": "total_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "human_vs_atomic_supply_scale_unverified",
+      "semantic": "Supply total reportado; escala humana/atômica deste caminho não comprovada.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:circulating_supply",
+      "endpoint": "market_rank",
+      "relative_pointer": "/circulating_supply",
+      "metric": "circulating_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "human_vs_atomic_supply_scale_unverified",
+      "semantic": "Supply circulante reportado; prova de escala é específica por endpoint.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:max_supply",
+      "endpoint": "market_rank",
+      "relative_pointer": "/max_supply",
+      "metric": "max_supply",
+      "value_type": "decimal",
+      "category": "supply",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "human_vs_atomic_supply_scale_unverified",
+      "semantic": "Supply máximo reportado; escala e significado de sentinelas não comprovados.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:creation_timestamp",
+      "endpoint": "market_rank",
+      "relative_pointer": "/creation_timestamp",
+      "metric": "creation_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": "unix_second",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_event_attribute_unix_seconds",
+      "semantic": "Atributo de criação reportado para o token, em segundos Unix; não é relógio de recepção.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:open_timestamp",
+      "endpoint": "market_rank",
+      "relative_pointer": "/open_timestamp",
+      "metric": "open_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": "unix_second",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_event_attribute_unix_seconds",
+      "semantic": "Atributo de abertura reportado para o token, em segundos Unix; não substitui criação.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:migrated_timestamp",
+      "endpoint": "market_rank",
+      "relative_pointer": "/migrated_timestamp",
+      "metric": "migrated_timestamp",
+      "value_type": "integer",
+      "category": "temporal",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_migration_timestamp_path_unit_unverified",
+      "semantic": "Caminho reconhecido, unidade e evento de migração exatos não documentados.",
+      "grain": "token_observation",
+      "window": "event_attribute_not_snapshot_clock",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:liquidity",
+      "endpoint": "market_rank",
+      "relative_pointer": "/liquidity",
+      "metric": "liquidity",
+      "value_type": "decimal",
+      "category": "liquidity",
+      "unit": "usd",
+      "quality_if_well_formed": "unverified",
+      "reason": "ranking_liquidity_pool_vs_aggregate_scope_unverified",
+      "semantic": "Liquidez USD reportada; documentação não resolve pool principal vs soma de pools.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 2,
+        "decimal": 3
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:initial_liquidity",
+      "endpoint": "market_rank",
+      "relative_pointer": "/initial_liquidity",
+      "metric": "initial_liquidity",
+      "value_type": "decimal",
+      "category": "liquidity",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "initial_liquidity_currency_event_scope_unverified",
+      "semantic": "Liquidez inicial reportada; unidade e evento inicial exatos pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 3,
+        "decimal": 2
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:launchpad",
+      "endpoint": "market_rank",
+      "relative_pointer": "/launchpad",
+      "metric": "launchpad",
+      "value_type": "string",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "endpoint_launchpad_vocabulary_unverified",
+      "semantic": "Identificador do launchpad; vocabulário depende da origem.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:launchpad_status",
+      "endpoint": "market_rank",
+      "relative_pointer": "/launchpad_status",
+      "metric": "launchpad_status",
+      "value_type": "string",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "endpoint_launchpad_vocabulary_unverified",
+      "semantic": "Estado reportado pelo endpoint; enums entre origens não são equivalentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:launchpad_platform",
+      "endpoint": "market_rank",
+      "relative_pointer": "/launchpad_platform",
+      "metric": "launchpad_platform",
+      "value_type": "string",
+      "category": "launch",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Nome da plataforma de lançamento/pool informado pelo provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:launchpad_progress",
+      "endpoint": "market_rank",
+      "relative_pointer": "/launchpad_progress",
+      "metric": "launchpad_progress",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "endpoint_ratio_scale_denominator_unverified",
+      "semantic": "Progresso reportado do launchpad; escala homologada somente em token_info.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:locked_ratio",
+      "endpoint": "market_rank",
+      "relative_pointer": "/locked_ratio",
+      "metric": "locked_ratio",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "endpoint_ratio_scale_denominator_unverified",
+      "semantic": "Parcela de supply bloqueado quando o endpoint documenta escala e denominador.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:price",
+      "endpoint": "market_rank",
+      "relative_pointer": "/price",
+      "metric": "price",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd_per_token",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_field_contract_checked",
+      "semantic": "Preço reportado USD por token; não é garantia de execução, fill ou preço de cada pool.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": true,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:market_cap",
+      "endpoint": "market_rank",
+      "relative_pointer": "/market_cap",
+      "metric": "market_cap",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_reported_usd_cap_supply_basis_unspecified",
+      "semantic": "Capitalização reportada em USD; supply utilizado não informado, não rotular FDV nem recalcular.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 4,
+        "integer": 1
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:history_highest_market_cap",
+      "endpoint": "market_rank",
+      "relative_pointer": "/history_highest_market_cap",
+      "metric": "history_highest_market_cap",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": "usd",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_reported_usd_cap_supply_basis_unspecified",
+      "semantic": "Maior capitalização histórica reportada em USD; supply e instante do pico não informados.",
+      "grain": "token_observation",
+      "window": "provider_history_peak_time_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:buy_tax",
+      "endpoint": "market_rank",
+      "relative_pointer": "/buy_tax",
+      "metric": "buy_tax",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ranking_tax_scale_unverified_empty_sentinel_not_converted",
+      "semantic": "Taxa reportada na compra; escala desta origem pendente; string vazia conservada, sem conversão em zero.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:sell_tax",
+      "endpoint": "market_rank",
+      "relative_pointer": "/sell_tax",
+      "metric": "sell_tax",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ranking_tax_scale_unverified_empty_sentinel_not_converted",
+      "semantic": "Taxa reportada na venda; escala desta origem pendente; string vazia conservada, sem conversão em zero.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "string": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:rug_ratio",
+      "endpoint": "market_rank",
+      "relative_pointer": "/rug_ratio",
+      "metric": "rug_ratio",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": "score_0_1",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_risk_score_not_calibrated_probability",
+      "semantic": "Escore de risco reportado entre 0 e 1; não tratar como probabilidade calibrada ou veredito.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": true,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:bundler_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/bundler_rate",
+      "metric": "bundler_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "volume_share_scale_window_unverified",
+      "semantic": "Participação reportada de volume de bots/bundlers; não concentração de supply.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:bundler_trader_amount_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/bundler_trader_amount_rate",
+      "metric": "bundler_trader_amount_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_ranking_path_semantics_unverified_no_alias",
+      "semantic": "Semântica exata deste caminho pendente; não alias de bundler_rate.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:insider_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/insider_rate",
+      "metric": "insider_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_ranking_path_semantics_unverified_no_alias",
+      "semantic": "Semântica exata deste caminho pendente; não alias de rat_trader_amount_rate.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "absent": 5
+      },
+      "observed_present_count": 0,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:rat_trader_amount_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/rat_trader_amount_rate",
+      "metric": "rat_trader_amount_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "volume_share_scale_window_unverified",
+      "semantic": "Participação reportada de volume de insiders; janela e escala pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:entrapment_ratio",
+      "endpoint": "market_rank",
+      "relative_pointer": "/entrapment_ratio",
+      "metric": "entrapment_ratio",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Razão de negociação reportada; denominador, escala e janela pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 3,
+        "integer": 2
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:top_10_holder_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/top_10_holder_rate",
+      "metric": "top_10_holder_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": "ratio",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_top10_supply_share",
+      "semantic": "Fração reportada do supply concentrada no top 10; metodologia/exclusões do provedor não verificadas.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": true,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 3,
+        "integer": 2
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:top70_sniper_hold_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/top70_sniper_hold_rate",
+      "metric": "top70_sniper_hold_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Razão reportada de holdings atuais do grupo top 70 snipers; definição/escala pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 4,
+        "decimal": 1
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:dev_team_hold_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/dev_team_hold_rate",
+      "metric": "dev_team_hold_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Participação reportada da equipe; escala e denominador exatos pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:burn_ratio",
+      "endpoint": "market_rank",
+      "relative_pointer": "/burn_ratio",
+      "metric": "burn_ratio",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "exact_ranking_path_semantics_unverified_no_alias",
+      "semantic": "Caminho exato não documentado; não alias de dev_token_burn_ratio.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:bot_degen_rate",
+      "endpoint": "market_rank",
+      "relative_pointer": "/bot_degen_rate",
+      "metric": "bot_degen_rate",
+      "value_type": "decimal",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "ratio_scale_denominator_window_unverified",
+      "semantic": "Razão de bot/degen reportada; população/escala/janela pendentes.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 4,
+        "decimal": 1
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:swaps",
+      "endpoint": "market_rank",
+      "relative_pointer": "/swaps",
+      "metric": "swaps",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "unverified",
+      "reason": "queried_window_not_encoded_in_fact",
+      "semantic": "Contagem de swaps no intervalo da requisição; intervalo ainda ausente no Fact.",
+      "grain": "token_observation",
+      "window": "request.interval_not_encoded_in_fact",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:buys",
+      "endpoint": "market_rank",
+      "relative_pointer": "/buys",
+      "metric": "buys",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "unverified",
+      "reason": "queried_window_not_encoded_in_fact",
+      "semantic": "Contagem de compras no intervalo da requisição; intervalo ainda ausente no Fact.",
+      "grain": "token_observation",
+      "window": "request.interval_not_encoded_in_fact",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:sells",
+      "endpoint": "market_rank",
+      "relative_pointer": "/sells",
+      "metric": "sells",
+      "value_type": "integer",
+      "category": "flow",
+      "unit": "count",
+      "quality_if_well_formed": "unverified",
+      "reason": "queried_window_not_encoded_in_fact",
+      "semantic": "Contagem de vendas no intervalo da requisição; intervalo ainda ausente no Fact.",
+      "grain": "token_observation",
+      "window": "request.interval_not_encoded_in_fact",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:visiting_count",
+      "endpoint": "market_rank",
+      "relative_pointer": "/visiting_count",
+      "metric": "visiting_count",
+      "value_type": "integer",
+      "category": "attention",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "visit_heat_unique_population_window_unverified",
+      "semantic": "Contagem/heat de atenção a esclarecer; não quantidade de holders.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:smart_degen_count",
+      "endpoint": "market_rank",
+      "relative_pointer": "/smart_degen_count",
+      "metric": "smart_degen_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets rotuladas smart money mantendo o token segundo o provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:renowned_count",
+      "endpoint": "market_rank",
+      "relative_pointer": "/renowned_count",
+      "metric": "renowned_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets KOL mantendo o token segundo o provedor.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:bot_degen_count",
+      "endpoint": "market_rank",
+      "relative_pointer": "/bot_degen_count",
+      "metric": "bot_degen_count",
+      "value_type": "integer",
+      "category": "holders",
+      "unit": "count",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_tagged_wallet_count_methodology_unspecified",
+      "semantic": "Contagem de wallets rotuladas bot/degen pelo provedor; classificação não é verificação independente.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:volume",
+      "endpoint": "market_rank",
+      "relative_pointer": "/volume",
+      "metric": "volume",
+      "value_type": "decimal",
+      "category": "flow",
+      "unit": "usd",
+      "quality_if_well_formed": "unverified",
+      "reason": "queried_window_not_encoded_in_fact",
+      "semantic": "Volume reportado em USD no intervalo da requisição; intervalo ainda ausente no Fact.",
+      "grain": "token_observation",
+      "window": "request.interval_not_encoded_in_fact",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": true,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 2,
+        "integer": 3
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:price_change_percent",
+      "endpoint": "market_rank",
+      "relative_pointer": "/price_change_percent",
+      "metric": "price_change_percent",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "percent_vs_ratio_documentation_conflict",
+      "semantic": "Variação reportada; tabela de resposta diz percentual e filtros dizem razão. Escala não resolvida, sem multiplicação/divisão por 100.",
+      "grain": "token_observation",
+      "window": "request.interval_not_encoded_in_fact",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 3,
+        "integer": 2
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:price_change_percent1m",
+      "endpoint": "market_rank",
+      "relative_pointer": "/price_change_percent1m",
+      "metric": "price_change_percent1m",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "percent_vs_ratio_documentation_conflict",
+      "semantic": "Variação reportada; tabela de resposta diz percentual e filtros dizem razão. Escala não resolvida, sem multiplicação/divisão por 100.",
+      "grain": "token_observation",
+      "window": "1m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 3,
+        "integer": 2
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:price_change_percent5m",
+      "endpoint": "market_rank",
+      "relative_pointer": "/price_change_percent5m",
+      "metric": "price_change_percent5m",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "percent_vs_ratio_documentation_conflict",
+      "semantic": "Variação reportada; tabela de resposta diz percentual e filtros dizem razão. Escala não resolvida, sem multiplicação/divisão por 100.",
+      "grain": "token_observation",
+      "window": "5m",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 3,
+        "integer": 2
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:price_change_percent1h",
+      "endpoint": "market_rank",
+      "relative_pointer": "/price_change_percent1h",
+      "metric": "price_change_percent1h",
+      "value_type": "decimal",
+      "category": "valuation",
+      "unit": null,
+      "quality_if_well_formed": "unverified",
+      "reason": "percent_vs_ratio_documentation_conflict",
+      "semantic": "Variação reportada; tabela de resposta diz percentual e filtros dizem razão. Escala não resolvida, sem multiplicação/divisão por 100.",
+      "grain": "token_observation",
+      "window": "1h",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "decimal": 4,
+        "integer": 1
+      },
+      "observed_present_count": 5,
+      "status": "pending_semantic_homologation",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "exclude_from_verified_aggregation_and_thresholds"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:is_honeypot",
+      "endpoint": "market_rank",
+      "relative_pointer": "/is_honeypot",
+      "metric": "is_honeypot",
+      "value_type": "integer",
+      "category": "risk",
+      "unit": "boolean_code_01",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_integer_flag_not_independent_security_verdict",
+      "semantic": "Flag do provedor 1/0 para honeypot; documentação limita a BSC/Base, demais cadeias sem homologação.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": [
+        "base",
+        "bsc"
+      ],
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1
+        ]
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:is_open_source",
+      "endpoint": "market_rank",
+      "relative_pointer": "/is_open_source",
+      "metric": "is_open_source",
+      "value_type": "integer",
+      "category": "risk",
+      "unit": "boolean_code_01",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_integer_flag_not_independent_security_verdict",
+      "semantic": "Flag do provedor 1/0 de código aberto; não prova de segurança do contrato.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1
+        ]
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:is_renounced",
+      "endpoint": "market_rank",
+      "relative_pointer": "/is_renounced",
+      "metric": "is_renounced",
+      "value_type": "integer",
+      "category": "risk",
+      "unit": "boolean_code_01",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_integer_flag_not_independent_security_verdict",
+      "semantic": "Flag do provedor 1/0 de renúncia; não alias automático de mint/freeze.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1
+        ]
+      },
+      "observed_types": {
+        "integer": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:renounced_mint",
+      "endpoint": "market_rank",
+      "relative_pointer": "/renounced_mint",
+      "metric": "renounced_mint",
+      "value_type": "integer",
+      "category": "risk",
+      "unit": "boolean_code_01",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_integer_flag_not_independent_security_verdict",
+      "semantic": "Flag do provedor 1/0 de renúncia de mint; aplicabilidade documentada somente Solana.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": [
+        "sol"
+      ],
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1
+        ]
+      },
+      "observed_types": {
+        "null": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:renounced_freeze_account",
+      "endpoint": "market_rank",
+      "relative_pointer": "/renounced_freeze_account",
+      "metric": "renounced_freeze_account",
+      "value_type": "integer",
+      "category": "risk",
+      "unit": "boolean_code_01",
+      "quality_if_well_formed": "valid",
+      "reason": "provider_integer_flag_not_independent_security_verdict",
+      "semantic": "Flag do provedor 1/0 de renúncia de freeze; aplicabilidade documentada somente Solana.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": [
+        "sol"
+      ],
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": [
+          0,
+          1
+        ]
+      },
+      "observed_types": {
+        "null": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:is_wash_trading",
+      "endpoint": "market_rank",
+      "relative_pointer": "/is_wash_trading",
+      "metric": "is_wash_trading",
+      "value_type": "boolean",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_boolean_flag_not_independent_security_verdict",
+      "semantic": "Booleano literal reportado para wash trading; metodologia de detecção não verificada.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "boolean": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    },
+    {
+      "contract_id": "gmgn.market_rank.v3:creator_close",
+      "endpoint": "market_rank",
+      "relative_pointer": "/creator_close",
+      "metric": "creator_close",
+      "value_type": "boolean",
+      "category": "risk",
+      "unit": null,
+      "quality_if_well_formed": "valid",
+      "reason": "provider_boolean_flag_not_independent_security_verdict",
+      "semantic": "Booleano literal reportado de estado do criador; não extrair eventos/horários deste flag.",
+      "grain": "token_observation",
+      "window": "snapshot_at_provider_observation_anchor_unspecified",
+      "supported_chains": null,
+      "constraints": {
+        "positive": false,
+        "nonnegative": false,
+        "fraction_0_1": false,
+        "allowed_json_integers": null
+      },
+      "observed_types": {
+        "boolean": 5
+      },
+      "observed_present_count": 5,
+      "status": "documented_provider_contract",
+      "evidence_url": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+      "implementation": "data_platform/midas_data/normalize.py:53",
+      "use_gate": "endpoint_contract_scope_and_chain_required"
+    }
+  ]
+}

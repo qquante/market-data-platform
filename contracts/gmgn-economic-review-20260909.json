@@ -1,0 +1,711 @@
+{
+  "observed_at": "2026-09-09T19:43:35.583003+00:00",
+  "normalizer": "gmgn-p0-v4",
+  "samples": [
+    {
+      "endpoint": "market_rank",
+      "capture_id": "09a154c0-e8c1-4a53-913d-97754e378327",
+      "received_at": "2026-09-09 19:43:10.475299+00:00",
+      "raw_sha256": "590282c511011b94e1943c7aae2bc1e9bbbe65d348bb170acc91a38c390b5ff1",
+      "items": 10,
+      "fact_count": 440,
+      "field_count": 968,
+      "normalizer": "gmgn-p0-v4",
+      "economic_contracts": [
+        {
+          "path": [
+            "decimals"
+          ],
+          "metric": "decimals",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "exact_path_scale_contract_unverified",
+          "presence": {
+            "absent": 10
+          },
+          "stored_facts": []
+        },
+        {
+          "path": [
+            "total_supply"
+          ],
+          "metric": "total_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "total_supply",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "circulating_supply"
+          ],
+          "metric": "circulating_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "absent": 10
+          },
+          "stored_facts": []
+        },
+        {
+          "path": [
+            "max_supply"
+          ],
+          "metric": "max_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "absent": 10
+          },
+          "stored_facts": []
+        },
+        {
+          "path": [
+            "liquidity"
+          ],
+          "metric": "liquidity",
+          "unit": "usd",
+          "contract_quality": "unverified",
+          "reason": "ranking_liquidity_pool_vs_aggregate_scope_unverified",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "liquidity",
+              "unit": "usd",
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "initial_liquidity"
+          ],
+          "metric": "initial_liquidity",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "initial_liquidity_currency_event_scope_unverified",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "initial_liquidity",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "price"
+          ],
+          "metric": "price",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": null,
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "price",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "market_cap"
+          ],
+          "metric": "market_cap",
+          "unit": "usd",
+          "contract_quality": "valid",
+          "reason": "provider_reported_usd_cap_supply_basis_unspecified",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "market_cap",
+              "unit": "usd",
+              "quality": "valid",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "history_highest_market_cap"
+          ],
+          "metric": "history_highest_market_cap",
+          "unit": "usd",
+          "contract_quality": "valid",
+          "reason": "provider_reported_usd_cap_supply_basis_unspecified",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "history_highest_market_cap",
+              "unit": "usd",
+              "quality": "valid",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "price_change_percent"
+          ],
+          "metric": "price_change_percent",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "percent_vs_ratio_documentation_conflict",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "price_change_percent",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "price_change_percent1m"
+          ],
+          "metric": "price_change_percent1m",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "percent_vs_ratio_documentation_conflict",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "price_change_percent1m",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "price_change_percent5m"
+          ],
+          "metric": "price_change_percent5m",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "percent_vs_ratio_documentation_conflict",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "price_change_percent5m",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        },
+        {
+          "path": [
+            "price_change_percent1h"
+          ],
+          "metric": "price_change_percent1h",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "percent_vs_ratio_documentation_conflict",
+          "presence": {
+            "present": 10
+          },
+          "stored_facts": [
+            {
+              "metric": "price_change_percent1h",
+              "unit": null,
+              "quality": "unverified",
+              "count": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "token_info",
+      "capture_id": "2b725e83-73a8-4ad9-ae3c-2c3e991e1de1",
+      "received_at": "2026-09-09 19:43:15.554511+00:00",
+      "raw_sha256": "f25b84ddda401d35fc1f6c6a14b52d963553b31c32d9ce51350fee44541d69f3",
+      "items": 1,
+      "fact_count": 68,
+      "field_count": 209,
+      "normalizer": "gmgn-p0-v4",
+      "economic_contracts": [
+        {
+          "path": [
+            "decimals"
+          ],
+          "metric": "decimals",
+          "unit": "decimal_places",
+          "contract_quality": "valid",
+          "reason": null,
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "decimals",
+              "unit": "decimal_places",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "total_supply"
+          ],
+          "metric": "total_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "total_supply",
+              "unit": null,
+              "quality": "unverified",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "circulating_supply"
+          ],
+          "metric": "circulating_supply",
+          "unit": "token",
+          "contract_quality": "valid",
+          "reason": "provider_human_token_units_no_decimal_rescaling",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "circulating_supply",
+              "unit": "token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "max_supply"
+          ],
+          "metric": "max_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "max_supply",
+              "unit": null,
+              "quality": "unverified",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "liquidity"
+          ],
+          "metric": "liquidity",
+          "unit": "usd",
+          "contract_quality": "valid",
+          "reason": "provider_main_pool_liquidity_usd",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "liquidity",
+              "unit": "usd",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "initial_liquidity"
+          ],
+          "metric": "initial_liquidity",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "initial_liquidity_currency_event_scope_unverified",
+          "presence": {
+            "absent": 1
+          },
+          "stored_facts": []
+        },
+        {
+          "path": [
+            "price",
+            "price"
+          ],
+          "metric": "price",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": null,
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "price",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "ath_price"
+          ],
+          "metric": "ath_price",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_reported_ath_price_peak_time_unspecified",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "ath_price",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "migration_market_cap"
+          ],
+          "metric": "migration_market_cap",
+          "unit": "usd",
+          "contract_quality": "unverified",
+          "reason": "migration_cap_supply_basis_event_quote_unverified",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "migration_market_cap",
+              "unit": "usd",
+              "quality": "unverified",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "price",
+            "price_1m"
+          ],
+          "metric": "window_reference_price_1m",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_price_at_start_of_named_window",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "window_reference_price_1m",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "price",
+            "price_5m"
+          ],
+          "metric": "window_reference_price_5m",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_price_at_start_of_named_window",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "window_reference_price_5m",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "price",
+            "price_1h"
+          ],
+          "metric": "window_reference_price_1h",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_price_at_start_of_named_window",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "window_reference_price_1h",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "price",
+            "price_6h"
+          ],
+          "metric": "window_reference_price_6h",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_price_at_start_of_named_window",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "window_reference_price_6h",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": [
+            "price",
+            "price_24h"
+          ],
+          "metric": "window_reference_price_24h",
+          "unit": "usd_per_token",
+          "contract_quality": "valid",
+          "reason": "provider_price_at_start_of_named_window",
+          "presence": {
+            "present": 1
+          },
+          "stored_facts": [
+            {
+              "metric": "window_reference_price_24h",
+              "unit": "usd_per_token",
+              "quality": "valid",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "trenches",
+      "capture_id": "e8af2ff0-3c39-4680-b21e-93eec663ef49",
+      "received_at": "2026-09-09 19:43:13.007244+00:00",
+      "raw_sha256": "405af47003918dccaec0ceeeeef42aaa16fa124a1371b225fe21cc4c055469a2",
+      "items": 179,
+      "fact_count": 4442,
+      "field_count": 22855,
+      "normalizer": "gmgn-p0-v4",
+      "economic_contracts": [
+        {
+          "path": [
+            "usd_market_cap"
+          ],
+          "metric": "usd_market_cap",
+          "unit": "usd",
+          "contract_quality": "valid",
+          "reason": "provider_reported_usd_cap_supply_basis_unspecified",
+          "presence": {
+            "absent": 179
+          },
+          "stored_facts": []
+        },
+        {
+          "path": [
+            "market_cap"
+          ],
+          "metric": "market_cap",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "trenches_market_cap_alias_currency_supply_basis_unverified",
+          "presence": {
+            "present": 179
+          },
+          "stored_facts": [
+            {
+              "metric": "market_cap",
+              "unit": null,
+              "quality": "unverified",
+              "count": 179
+            }
+          ]
+        },
+        {
+          "path": [
+            "price"
+          ],
+          "metric": "price",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "trenches_exact_price_path_currency_unverified",
+          "presence": {
+            "present": 179
+          },
+          "stored_facts": [
+            {
+              "metric": "price",
+              "unit": null,
+              "quality": "unverified",
+              "count": 179
+            }
+          ]
+        },
+        {
+          "path": [
+            "liquidity"
+          ],
+          "metric": "liquidity",
+          "unit": "usd",
+          "contract_quality": "unverified",
+          "reason": "trenches_liquidity_pool_vs_aggregate_scope_unverified",
+          "presence": {
+            "present": 179
+          },
+          "stored_facts": [
+            {
+              "metric": "liquidity",
+              "unit": "usd",
+              "quality": "unverified",
+              "count": 179
+            }
+          ]
+        },
+        {
+          "path": [
+            "total_supply"
+          ],
+          "metric": "total_supply",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "human_vs_atomic_supply_scale_unverified",
+          "presence": {
+            "present": 179
+          },
+          "stored_facts": [
+            {
+              "metric": "total_supply",
+              "unit": null,
+              "quality": "unverified",
+              "count": 179
+            }
+          ]
+        },
+        {
+          "path": [
+            "decimals"
+          ],
+          "metric": "decimals",
+          "unit": null,
+          "contract_quality": "unverified",
+          "reason": "trenches_exact_decimals_path_contract_unverified",
+          "presence": {
+            "present": 179
+          },
+          "stored_facts": [
+            {
+              "metric": "decimals",
+              "unit": null,
+              "quality": "unverified",
+              "count": 179
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "last_10_minutes": [
+    {
+      "endpoint": "market_rank",
+      "captures": 10,
+      "raw_bytes": 229932,
+      "facts": 4400,
+      "fields": 9680,
+      "max_accept_delay_seconds": "0.975",
+      "max_projection_delay_seconds": "2.100"
+    },
+    {
+      "endpoint": "token_info",
+      "captures": 10,
+      "raw_bytes": 54124,
+      "facts": 680,
+      "fields": 2019,
+      "max_accept_delay_seconds": "0.902",
+      "max_projection_delay_seconds": "2.169"
+    },
+    {
+      "endpoint": "trenches",
+      "captures": 10,
+      "raw_bytes": 7749685,
+      "facts": 45036,
+      "fields": 230938,
+      "max_accept_delay_seconds": "0.683",
+      "max_projection_delay_seconds": "4.666"
+    }
+  ],
+  "selection": "latest fully applied capture per endpoint; presence is not global coverage",
+  "review": {
+    "reviewed_on": "2026-09-09",
+    "market_documentation": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md",
+    "token_documentation": "https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-token/SKILL.md",
+    "source_version": "mutable main consulted; no fixed upstream commit claimed",
+    "decision": "keep current contracts; no aliases promoted, no rescaling or derived market cap",
+    "coverage": "valuation, supply and liquidity paths in current adapters; three stored real responses; not every provider field"
+  }
+}

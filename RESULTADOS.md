@@ -1,5 +1,7 @@
 # Resultado da base GMGN via Docker
 
+> Registro histórico anterior ao reset de 09/09/2026. Dados, dumps e evidências listados em .data/gmgn-data/evidence e .data/gmgn-data/backups foram incluídos na limpeza; links podem estar indisponíveis. Não representa runtime ou restauração atual. Estado e evidências preservadas: [SESSION_SUMMARY_20260909.md](SESSION_SUMMARY_20260909.md).
+
 Entrega: 2026-09-08. Escopo concluído: fundação local de dados, com controle em seis tarefas e 19 subtarefas. Coordenação A0 e três agentes especializados. Implementação e provas executadas; não apenas especificação.
 
 ## O que está funcionando
