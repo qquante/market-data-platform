@@ -1,14 +1,14 @@
 # Pesquisa reproduzível GMGN — implementação v1
 
-> Atualização CP-DASHBOARD-ALL-05: [dashboard completo dos dados disponíveis, validação e limites](DASHBOARD_ALL_DATA.md).
+> Atualização CP-DASHBOARD-ALL-05: dashboard completo dos dados disponíveis, validação e limites (not included in this repository).
 
-> Estratégias anteriores importadas: [319 definições, parâmetros e compatibilidade](LEGACY_STRATEGIES.md).
+> Estratégias anteriores importadas: 319 definições, parâmetros e compatibilidade (not included in this repository).
 
-> Atualização CP-RESEARCH-QUALIFICATION-03: [entrega atual, evidências e limites](RESEARCH_QUALIFICATION.md). Qualificação empírica, amostra 300/frame 5.438, OHLCV, fila/cache e carga real implantados; estratégia ainda sem validação por cobertura insuficiente. O aceite anterior abaixo permanece histórico.
+> Atualização CP-RESEARCH-QUALIFICATION-03: entrega atual, evidências e limites (not included in this repository). Qualificação empírica, amostra 300/frame 5.438, OHLCV, fila/cache e carga real implantados; estratégia ainda sem validação por cobertura insuficiente. O aceite anterior abaixo permanece histórico.
 
-> Estado vigente em 11/09/2026: implantado e homologado na base real, CP-RESEARCH-UI-LIVE-02. [Aceite live, comandos e limites](LIVE_ACCEPTANCE.md). As referências abaixo a implantação pendente/preview registram o checkpoint local anterior.
+> Estado vigente em 11/09/2026: implantado e homologado na base real, CP-RESEARCH-UI-LIVE-02. Aceite live, comandos e limites (not included in this repository). As referências abaixo a implantação pendente/preview registram o checkpoint local anterior.
 
-Checkpoint CP-RESEARCH-UI-01, 11/09/2026. Código e consumidores homologados em fixtures locais; implantação real pendente. O estado de entrega está em [FINAL_ACCEPTANCE.md](FINAL_ACCEPTANCE.md).
+Checkpoint CP-RESEARCH-UI-01, 11/09/2026. Código e consumidores homologados em fixtures locais; implantação real pendente. O estado de entrega está em FINAL_ACCEPTANCE.md (not included in this repository).
 
 ## Universo, clocks e labels — 6.2
 

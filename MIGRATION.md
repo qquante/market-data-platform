@@ -2,7 +2,7 @@
 
 Medições históricas obtidas em investigação somente leitura em 08/09/2026, aproximadamente 22:45–22:55 UTC: catálogo PostgreSQL, planos sem ANALYZE e três amostras distintas de no máximo 200 metadados. A revisão documental posterior confronta essas observações com `midas_data/bridge.py` efetivamente implementado nesta sessão. Não atualiza as medições nem afirma que o histórico foi migrado.
 
-Nesta revisão foram lidos arquivos locais e alterado somente este documento. Nenhum request GMGN, consulta nova ao banco, teste, DDL, mudança de rede, start/stop, backup, ingestão ou operação Git foi executado. Ativação e evidências de runtime pertencem ao coordenador; os resultados de aceitação são registrados separadamente em [BRIDGE_ACCEPTANCE.md](tests/BRIDGE_ACCEPTANCE.md).
+Nesta revisão foram lidos arquivos locais e alterado somente este documento. Nenhum request GMGN, consulta nova ao banco, teste, DDL, mudança de rede, start/stop, backup, ingestão ou operação Git foi executado. Ativação e evidências de runtime pertencem ao coordenador; os resultados de aceitação são registrados separadamente em BRIDGE_ACCEPTANCE.md (not included in this repository).
 
 A ponte implementada aproveita a evidência já persistida pelo coletor legado. Ela lê metadados de chamadas `success` e `error`, recupera individualmente o bruto elegível dos sucessos e entrega à base nova com o call_id original. Chamadas `error` são registradas como `unavailable/source_error_without_body`; não são transformadas em uma resposta HTTP original inexistente. Endpoints sem adapter podem ter bruto aceito e catálogo de campos, mantendo `unsupported_endpoint` e nenhum fato interpretado. Não há garantia de CDC, fronteira histórica definitiva ou recuperação de um corpo que a origem não armazenou. Referências: `bridge.py:55–70`, `:259–309`.
 
@@ -168,7 +168,7 @@ O limite de 50 metadados não implica 50 corpos lidos: accepted iguais usam ledg
 
 Audit repetido custa O(chamadas desde origin) em metadados por ciclo. O custo cresce com a idade da ponte. A fronteira fixa permite concluir cada ciclo; não fornece por si só SLA de revisita. Aumentar concorrência sem medir pode disputar I/O e pool com o coletor.
 
-O guard inicial abaixo é histórico e foi substituído em DB-09.1 pela admissão por espaço livre real; operação e testes atuais em [ADMISSION.md](ADMISSION.md). Ele rodava antes de outra página:
+O guard inicial abaixo é histórico e foi substituído em DB-09.1 pela admissão por espaço livre real; operação e testes atuais em ADMISSION.md (not included in this repository). Ele rodava antes de outra página:
 
 - **Queue 500:** soma dois probes limitados a 500 linhas cada — outbox não consumido e normalization_runs disponíveis ainda não aplicados aos destinos. A soma pode chegar a 1.000 e pausa quando >=500. Não é um COUNT completo, nem necessariamente 500 chamadas distintas ou 500 batches; não converter esse número em segundos de entrada.
 - **Raw 32 GiB:** orçamento padrão de accepted_raw_bytes desta ponte/origem, com **reserva de 200 MiB por página** (50 × 4 MiB). Pausa quando bytes já contabilizados + reserva excederem o orçamento; mínimo de configuração é 200 MiB.

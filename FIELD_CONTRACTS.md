@@ -1,8 +1,8 @@
 # Contratos de campos GMGN — revisão v3
 
-> Atualização 11/09/2026: [dicionário operacional CP-BASE-FIELDS-08](FIELD_DICTIONARY.md) instalado; 831 caminhos das cinco fontes e cobertura por ocorrência. As contagens e pendências abaixo pertencem ao checkpoint histórico indicado.
+> Atualização 11/09/2026: dicionário operacional CP-BASE-FIELDS-08 (not included in this repository) instalado; 831 caminhos das cinco fontes e cobertura por ocorrência. As contagens e pendências abaixo pertencem ao checkpoint histórico indicado.
 
-> Inventário histórico v3. O runtime atual usa normalizador v4: janelas explícitas válidas do ranking já são promovidas. Trending é market_rank. Revisão atual de fontes/valuation: [MARKET_SOURCES.md](MARKET_SOURCES.md); detalhes v4: [TRAJECTORY_CONTRACTS.md](TRAJECTORY_CONTRACTS.md).
+> Inventário histórico v3. O runtime atual usa normalizador v4: janelas explícitas válidas do ranking já são promovidas. Trending é market_rank. Revisão atual de fontes/valuation: MARKET_SOURCES.md (not included in this repository); detalhes v4: TRAJECTORY_CONTRACTS.md (not included in this repository).
 
 Revisão documental e unitária de 2026-09-08. Versão do normalizador: `gmgn-p0-v3`. Não é homologação econômica/on-chain, rollout ou replay executado.
 

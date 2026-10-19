@@ -1,8 +1,8 @@
 # Abrangência dos dados antes das estratégias — CP-DATA-SCOPE-09
 
-> **Atualização CP-DATA-SPEED-12:** [otimização implantada e medida](SPEED_RESULTS.md). Perfil ativo 8 s / 16 s, painel 2 s; teste curto aprovado, histórico ~26 s. 5 s / 10 s ainda acumula fila. Três capturas NUL em quarentena; cobertura ampla continua aberta. Os valores anteriores abaixo são históricos.
+> **Atualização CP-DATA-SPEED-12:** otimização implantada e medida (not included in this repository). Perfil ativo 8 s / 16 s, painel 2 s; teste curto aprovado, histórico ~26 s. 5 s / 10 s ainda acumula fila. Três capturas NUL em quarentena; cobertura ampla continua aberta. Os valores anteriores abaixo são históricos.
 
-> Atualização CP-DATA-CONTINUOUS-11: [agenda contínua implantada](CONTINUOUS_COLLECTION.md), sem teto artificial, alimentada por Trenches/Trending e pelo cadastro anterior. Retomada da fonte e reinício provados; primeira cobertura individual segue parcial. Um campo NUL permanece em quarentena. D1–D5 continuam sujeitos ao aceite amplo.
+> Atualização CP-DATA-CONTINUOUS-11: agenda contínua implantada (not included in this repository), sem teto artificial, alimentada por Trenches/Trending e pelo cadastro anterior. Retomada da fonte e reinício provados; primeira cobertura individual segue parcial. Um campo NUL permanece em quarentena. D1–D5 continuam sujeitos ao aceite amplo.
 
 11/09/2026. Diretriz reafirmada pelo usuário: capturar os dados de mercado do projeto, categorizar corretamente, preservar o histórico e provar cobertura/armazenamento antes de escolher estratégias. **O aceite CP-BASE-FIELDS-08 fecha somente o catálogo de uma amostra das cinco fontes ativas. Não fecha esta etapa ampla de dados.**
 

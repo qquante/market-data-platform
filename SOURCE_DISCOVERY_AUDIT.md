@@ -1,6 +1,6 @@
 # Descoberta e acompanhamento GMGN — auditoria real de 11/09/2026
 
-> Atualização posterior: [CP-DATA-CONTINUOUS-11](CONTINUOUS_COLLECTION.md) implantou a nova agenda e retomou a coleta. Os números e limites abaixo descrevem a auditoria anterior.
+> Atualização posterior: CP-DATA-CONTINUOUS-11 (not included in this repository) implantou a nova agenda e retomou a coleta. Os números e limites abaixo descrevem a auditoria anterior.
 
 Checkpoint CP-DATA-SOURCES-10. Auditoria solicitada pelo usuário após encontrar apenas 10 tokens ativos. Esta entrega conclui a investigação de fontes e do gargalo; **não removeu o teto nem implantou uma nova agenda**. D1/D2 do aceite amplo de dados continuam abertos até implementação e validação.
 
