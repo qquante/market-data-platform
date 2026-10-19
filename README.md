@@ -34,7 +34,7 @@ Internal package and module names are retained where changing them would affect 
 
 ## Setup
 
-Use Python 3.13, create a virtual environment, then install this package with pip install -e . . Inspect pyproject.toml before installing; Python 3.14 is outside its declared range.
+Use Python 3.13, create a virtual environment, then install this package with pip install -e .. Inspect pyproject.toml before installing; Python 3.14 is outside its declared range.
 
 Start from an isolated environment. Use `.env.example` when present and inspect the configuration loader: an example file is not necessarily loaded automatically. Runtime databases, real account sessions and private credentials are not bundled. Live integration prerequisites are separate from local tests.
 
