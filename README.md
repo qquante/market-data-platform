@@ -1,97 +1,60 @@
 # Market Data Platform
 
-**Auditable ingestion, durable evidence and recoverable event delivery.**
-
 ![Python: 3.13](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python) ![API: FastAPI](https://img.shields.io/badge/API-FastAPI-009688?style=flat-square&logo=fastapi) ![Events: NATS JetStream](https://img.shields.io/badge/Events-NATS%20JetStream-27AAE1?style=flat-square) [![License: MIT](https://img.shields.io/badge/License-MIT-555555?style=flat-square)](LICENSE)
 
-[Overview](#overview) · [Quickstart](#quickstart) · [Example](#example) · [Validation](#validation) · [Documentation](#documentation)
+A Python/FastAPI data backend that keeps the source behind each market observation and makes normalization, delivery and recovery independently inspectable.
 
-## Overview
+Raw response evidence, operational facts, analytical projections and consumer receipts have different lifetimes. This repository models those boundaries explicitly instead of reducing ingestion to “fetch JSON and insert a row.”
 
-A backend for retaining the source behind a market observation, normalizing it through explicit contracts and delivering it to downstream consumers. The implementation separates raw evidence, operational state, analytical projections and delivery receipts so a failed step can be inspected and replayed.
-
-**Stack:** Python 3.13 · FastAPI · Pydantic · asyncpg · PostgreSQL · DuckDB · NATS JetStream · Docker
-
-## Evidence before derived data
-
-| Component | Behavior |
-| --- | --- |
-| Capture identity | Metadata keeps the source, request/receive times, evidence kind and a stable capture ID. |
-| Exact values | Normalization preserves numeric meaning and units instead of globally converting values to floating point. |
-| Quality states | `valid`, `unverified`, `invalid` and `missing` express contract status; fixture evidence remains a fixture. |
-| Recovery | Outbox publication and delivery state make pending work and replay boundaries explicit. |
-
-## Processing path
+## One capture, several responsibilities
 
 ```mermaid
-flowchart LR
-  A[Source response] --> B[Capture metadata and raw evidence]
-  B --> C[Contract validation and normalization]
-  C --> D[(PostgreSQL and outbox)]
-  D --> E[NATS JetStream delivery]
-  E --> F[Consumers and analytical projections]
-  D --> G[Bounded API queries]
+flowchart TB
+  Capture[Response bytes and capture metadata] --> Raw[Raw evidence store]
+  Capture --> Validate[Pydantic field contracts]
+  Validate --> Facts[(PostgreSQL facts)]
+  Facts --> Outbox[Transactional outbox]
+  Outbox --> NATS[NATS JetStream]
+  NATS --> Consumer[Consumer and delivery receipts]
+  Facts --> API[FastAPI bounded queries]
+  Facts --> Analytics[DuckDB analytical paths]
+  Consumer --> Recovery[Delivery recovery and replay]
+  Recovery --> Outbox
 ```
 
-## Quickstart
+The [public contracts](midas_data/contracts.py) require explicit clocks and evidence kinds. Numeric facts retain declared types/units; a valid adapter record does not certify upstream truth. Sensitive credential carriers are rejected from structured capture metadata.
+
+## Data quality is a value, not a missing row
+
+`valid`, `unverified`, `invalid` and `missing` are distinct quality states. `fixture` source data stays a fixture. `original_response` and `legacy_reserialized` distinguish preserved source bytes from reconstructed legacy material.
+
+Two captures can have identical payloads and still represent different requests/times. Capture identity must therefore survive payload deduplication. [FIELD_CONTRACTS.md](FIELD_CONTRACTS.md) and [INTERFACES.md](INTERFACES.md) describe these rules and the consumer-facing boundaries.
+
+## Install the package and run the local suite
+
+The package requires **Python 3.13** (`>=3.13,<3.14`), with pinned dependencies in [pyproject.toml](pyproject.toml).
 
 ```console
 python -m venv .venv
-# Activate .venv, then:
 python -m pip install -e .
 python -m pip install pytest==9.1.1
 python -m pytest -m "not integration" tests -W error -o addopts= -q
 ```
 
-Use Python 3.13, as declared by the package. The commands exercise the offline suite. Live API ingestion, PostgreSQL, NATS and analytical destinations require the deployment configuration described in the linked interfaces.
+Activate the virtual environment before installing. The command excludes separately marked integration tests. The previously recorded offline suite passed after restore/reconcile regressions were made self-contained; it does not provision PostgreSQL, NATS or parent analytical infrastructure.
 
-## Example
+## Read beyond ingestion
 
-**Follow one capture**
-
-1. Read the original bytes and their request/receive metadata.
-2. Validate the capture contract and retain its evidence classification.
-3. Normalize supported fields into facts and field observations.
-4. Commit operational records and publish pending delivery work.
-5. Inspect consumer receipts before treating downstream processing as complete.
-
-The contracts are defined in [contracts.py](midas_data/contracts.py); the data flow and availability semantics are specified in [INTERFACES.md](INTERFACES.md). Two captures with the same payload can still represent different capture events.
-
-## Configuration and storage
-
-Keep source access and deployment credentials outside captured metadata. PostgreSQL is the operational store; DuckDB supports analytical paths. Some analytical interfaces depend on parent infrastructure, including ClickHouse/DuckLake configuration; those references do not provide a standalone deployment here.
-
-## Repository guide
-
-| Location | Responsibility |
+| Implementation | Why it matters |
 | --- | --- |
-| [midas_data/contracts.py](midas_data/contracts.py) | Capture, fact and quality contracts |
-| [midas_data/delivery.py](midas_data/delivery.py) | Delivery and recovery coordination |
-| [midas_data/api.py](midas_data/api.py) | API boundary |
-| [midas_data/migrations](midas_data/migrations) | Versioned database changes |
-| [tests](tests) | Offline and separately marked integration suites |
+| [delivery.py](midas_data/delivery.py) | Delivery coordination and recovery state. |
+| [worker.py](midas_data/worker.py) | Processing boundary behind incoming work. |
+| [migrations](midas_data/migrations) | Versioned operational schema. |
+| [research_api.py](midas_data/research_api.py) | Research-facing API surface. |
+| [paper_replay.py](midas_data/paper_replay.py) | Separate replay/simulation functionality. |
 
-## Validation
+The checkout is a platform slice: parent Compose/private source access and some ClickHouse/DuckLake infrastructure are not bundled. Use [scope and acceptance](DATA_SCOPE_AND_ACCEPTANCE.md) and [migration notes](MIGRATION.md) before integrating it. Paper/research records must remain distinguishable from real executions.
 
-Python 3.13.16 on Windows: 988 tests and 39 subtests passed with warnings treated as errors; 34 tests were skipped and 203 integration-marked tests were deselected. PostgreSQL, NATS, Docker and live data providers were not started.
+**Technology:** Python 3.13 · FastAPI · Pydantic · asyncpg · PostgreSQL · DuckDB · NATS JetStream · Docker
 
-
-
-The standalone restore-reconciliation helper is included in `scripts/` for its offline regression tests. Running it against real databases requires the parent restore configuration.
-
-These are the last recorded offline checks (20 October 2026), not a new execution triggered by this documentation revision.
-
-## Scope and operational boundaries
-
-This repository is a data-platform slice. Parent Compose configuration and private source access are not bundled. Offline checks do not establish live provider coverage, load capacity or deployment readiness.
-
-## Documentation
-
-- [Interfaces and processing boundaries](INTERFACES.md)
-- [Field contracts](FIELD_CONTRACTS.md)
-- [Scope and acceptance criteria](DATA_SCOPE_AND_ACCEPTANCE.md)
-- [Migration notes](MIGRATION.md)
-
-## License and attribution
-
-Project-authored source code is licensed under the [MIT License](LICENSE). Third-party components and datasets retain their respective rights and licenses.
+Project-authored source: [MIT](LICENSE). Third-party components retain their own notices and terms.
