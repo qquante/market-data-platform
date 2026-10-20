@@ -135,8 +135,9 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
     async def test_lost_owner_cancels_stages(self):
         p=self.make();owner=SimpleNamespace(fetchval=AsyncMock(side_effect=ConnectionError()))
         async def idle(*args):await asyncio.Event().wait()
-        with patch.object(p,"relay",idle),patch.object(p,"normalize",idle),patch.object(p,"deliver",lambda target:idle()),patch.object(p,"maintenance",idle):
-            with self.assertRaises(ExceptionGroup):await asyncio.wait_for(p.run(owner),1)
+        with patch.object(p,"relay",idle),patch.object(p,"normalize",idle),patch.object(p,"deliver",lambda target:idle()),patch.object(p,"maintenance",idle),patch.object(p.registry,"step",idle):
+            with self.assertRaises(ExceptionGroup) as raised:await asyncio.wait_for(p.run(owner),1)
+        self.assertTrue(any(isinstance(exc,ConnectionError) for exc in raised.exception.exceptions))
         self.assertTrue(all("inflight_since" not in v for v in p.stages.values()))
 
     async def test_broker_retries_incomplete_consumer_initialization(self):

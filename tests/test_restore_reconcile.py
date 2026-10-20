@@ -5,8 +5,8 @@ from pathlib import Path
 import sys
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "data_platform"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 spec = importlib.util.spec_from_file_location("restore_reconcile", ROOT / "scripts/gmgn-restore-reconcile.py")
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
